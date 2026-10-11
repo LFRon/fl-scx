@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../../backend/app_state.dart';
 import '../../backend/models/sched_mode.dart';
+import '../../widgets/recommendation.dart';
 
 /// 调度器页的界面状态：当前选中的调度器、模式、自定义参数与操作。
 ///
@@ -120,13 +121,15 @@ class SchedulersController extends GetxController {
     if (schedulers.isEmpty) {
       return;
     }
+    // 与列表显示顺序保持一致：推荐调度器（lavd）排在最前。
+    final first = sortedSchedulersRecommendedFirst(schedulers).first;
 
     final current = selected.value;
     if (current == null) {
       final running =
           snapshot.schedulerRunning &&
           schedulers.contains(snapshot.currentScheduler);
-      selected.value = running ? snapshot.currentScheduler : schedulers.first;
+      selected.value = running ? snapshot.currentScheduler : first;
       if (running) {
         mode.value = snapshot.currentMode;
       }
@@ -135,7 +138,7 @@ class SchedulersController extends GetxController {
     }
 
     if (!schedulers.contains(current)) {
-      selected.value = schedulers.first;
+      selected.value = first;
       _loadInfo(selected.value!);
     }
   }

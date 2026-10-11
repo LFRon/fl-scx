@@ -3,6 +3,7 @@ import 'package:yaru/yaru.dart';
 
 import '../../../backend/models/sched_mode.dart';
 import '../../../backend/models/scx_snapshot.dart';
+import '../../../widgets/recommendation.dart';
 import '../../../widgets/sched_mode_visuals.dart';
 import '../../../widgets/status_chip.dart';
 
@@ -39,6 +40,8 @@ class SchedModeSelector extends StatelessWidget {
     final theme = Theme.of(context);
     final configured =
         mode == SchedMode.auto || info.configuredModes.contains(mode);
+    final isRecommended =
+        info.name == recommendedScheduler && mode == recommendedMode;
 
     return YaruRadioListTile<SchedMode>(
       value: mode,
@@ -54,6 +57,10 @@ class SchedModeSelector extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(mode.label),
+          if (isRecommended) ...[
+            const SizedBox(width: 8),
+            const RecommendedChip(),
+          ],
           if (!configured) ...[
             const SizedBox(width: 8),
             StatusChip(label: '未配置参数', color: theme.colorScheme.outline),

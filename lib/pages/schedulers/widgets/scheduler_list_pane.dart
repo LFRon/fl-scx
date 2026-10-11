@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../../backend/models/mode_args.dart';
+import '../../../widgets/recommendation.dart';
 import '../../../widgets/status_chip.dart';
 
 /// 调度器列表（左侧分栏）。
@@ -47,13 +48,17 @@ class SchedulerListPane extends StatelessWidget {
       );
     }
 
+    // 推荐调度器（lavd）存在时永远排在第一个。
+    final ordered = sortedSchedulersRecommendedFirst(schedulers);
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: schedulers.length,
+      itemCount: ordered.length,
       itemBuilder: (context, index) {
-        final name = schedulers[index];
+        final name = ordered[index];
         final isSelected = name == selected;
         final isRunning = name == runningScheduler;
+        final isRecommended = name == recommendedScheduler;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -72,8 +77,18 @@ class SchedulerListPane extends StatelessWidget {
             ),
             title: Text(shortSchedulerName(name)),
             subtitle: Text(name),
-            trailing: isRunning
-                ? StatusChip(label: '运行中', color: colors.success)
+            // 推荐标识在“运行中”左侧。
+            trailing: (isRunning || isRecommended)
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isRecommended) const RecommendedChip(),
+                      if (isRecommended && isRunning)
+                        const SizedBox(width: 8),
+                      if (isRunning)
+                        StatusChip(label: '运行中', color: colors.success),
+                    ],
+                  )
                 : null,
           ),
         );

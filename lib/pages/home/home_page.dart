@@ -22,7 +22,11 @@ class HomePage extends GetView<ScxAppState> {
     return YaruMasterDetailPage(
       controller: home.pages,
       appBar: AppBar(
-        title: const Text('SCX 调度管理器'),
+        title: DefaultTextStyle.merge(
+          // 顶栏标题字号在此调整（继承主题颜色与字重）。
+          style: const TextStyle(fontSize: 18),
+          child: const Text('SCX 调度管理器'),
+        ),
         actions: [
           Obx(
             () => controller.busy.value

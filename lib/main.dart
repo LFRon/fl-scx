@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import 'app/scx_app.dart';
+import 'app/fl-scx_app.dart';
 import 'backend/app_state.dart';
 
 Future<void> main() async {

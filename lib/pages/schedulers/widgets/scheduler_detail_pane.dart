@@ -39,6 +39,12 @@ class SchedulerDetailPane extends StatelessWidget {
       final mode = controller.mode.value;
       final isRunning =
           snapshot.schedulerRunning && snapshot.currentScheduler == scheduler;
+      // 本调度器正在运行时的实际模式；使用自定义参数运行时没有
+      // “运行中的模式”，不标记任何模式。
+      final runningMode =
+          isRunning && snapshot.currentArgs.isEmpty
+          ? snapshot.currentMode
+          : null;
       final canApply = !app.busy.value && snapshot.daemonAvailable;
       final operation = app.activeOperation.value;
       final applyOperation =
@@ -110,6 +116,7 @@ class SchedulerDetailPane extends StatelessWidget {
         SchedModeSelector(
           info: info,
           selected: mode,
+          runningMode: runningMode,
           onChanged: (value) => controller.mode.value = value,
         ),
         const SizedBox(height: 12),

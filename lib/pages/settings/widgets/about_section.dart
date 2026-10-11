@@ -1,0 +1,51 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:yaru/yaru.dart';
+
+import '../../../backend/app_state.dart';
+
+/// 关于信息。
+class AboutSection extends GetView<ScxAppState> {
+  const AboutSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final snapshot = controller.snapshot.value;
+      final ops = snapshot.kernelOps.isEmpty ? '无' : snapshot.kernelOps;
+
+      return YaruSection(
+        headline: const Text('关于'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const YaruListTile(
+              leading: Icon(YaruIcons.computer_filled),
+              title: Text('SCX 调度管理器'),
+              subtitle: Text(
+                '基于 Flutter + Yaru 的 sched_ext 图形化管理工具\n'
+                '通过 org.scx.Loader D-Bus 接口控制 scx_loader',
+              ),
+            ),
+            YaruListTile(
+              leading: const Icon(YaruIcons.history),
+              title: const Text('scx_loader 配置文件'),
+              subtitle: Text(
+                snapshot.configPath.isEmpty ? '未找到' : snapshot.configPath,
+              ),
+            ),
+            YaruListTile(
+              leading: const Icon(YaruIcons.question),
+              title: const Text('内核 sched_ext'),
+              subtitle: Text(
+                snapshot.kernelState.isEmpty
+                    ? '未检测到 /sys/kernel/sched_ext'
+                    : '状态：${snapshot.kernelState} · ops：$ops',
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}

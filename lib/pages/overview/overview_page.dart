@@ -1,0 +1,33 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:yaru/yaru.dart';
+
+import '../../backend/app_state.dart';
+import 'widgets/current_scheduler_card.dart';
+import 'widgets/quick_actions_row.dart';
+import 'widgets/system_status_section.dart';
+
+/// 概览页：展示当前调度器状态与快捷操作。
+class OverviewPage extends GetView<ScxAppState> {
+  const OverviewPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return YaruDetailPage(
+      appBar: AppBar(title: const Text('概览')),
+      body: Obx(() {
+        final snapshot = controller.snapshot.value;
+        return ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            CurrentSchedulerCard(snapshot: snapshot),
+            const SizedBox(height: 16),
+            QuickActionsRow(state: controller),
+            const SizedBox(height: 24),
+            SystemStatusSection(snapshot: snapshot),
+          ],
+        );
+      }),
+    );
+  }
+}

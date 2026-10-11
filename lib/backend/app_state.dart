@@ -364,12 +364,18 @@ class ScxAppState extends GetxController {
   // 配置 / systemd 命令（管理员会话）
   // ---------------------------------------------------------------------------
 
-  /// 将 [scheduler] + [mode] 写入 scx_loader 配置文件作为开机默认。
+  /// 将 [scheduler] + [mode] 写入 scx_loader 配置文件作为开机默认；
+  /// [args] 非空时一并写入所选模式的参数数组，使开机同样携带生效。
   Future<String?> saveDefaultScheduler({
     required String scheduler,
     required SchedMode mode,
+    List<String> args = const <String>[],
   }) => _execute(
-    () => _config.writeDefaults(scheduler: scheduler, mode: mode),
+    () => _config.writeDefaults(
+      scheduler: scheduler,
+      mode: mode,
+      args: args,
+    ),
   );
 
   /// 启用/禁用 scx_loader 服务开机自启。

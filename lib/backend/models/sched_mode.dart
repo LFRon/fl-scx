@@ -17,6 +17,9 @@ enum SchedMode {
   /// scxctl 命令行（clap value_enum）使用的名称。
   String get cliName => tomlName.toLowerCase();
 
+  /// scx_loader 配置文件中该模式的参数键名（`[scheds.<sched>]` 段内）。
+  String get configKey => '${cliName}_mode';
+
   /// 界面显示名称。
   final String label;
 

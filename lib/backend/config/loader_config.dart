@@ -93,11 +93,16 @@ class LoaderConfig {
   /// 在 [source] 基础上更新默认调度设置，保留其余内容。
   ///
   /// 重复应用时先移除上次写入的管理注释横幅与 default_* 行，
-  /// 避免注释与空行不断累积（结果幂等）。
+  /// 避免注释与空行不断累积。
+  ///
+  /// [args] 非空时，会一并写入/更新 `[scheds.<scheduler>]` 段内
+  /// 所选模式的参数数组，使开机（scx_loader 启动）时同样携带
+  /// 用户自定义参数生效。
   String applyDefaults(
     String source, {
     required String scheduler,
     required SchedMode mode,
+    List<String> args = const <String>[],
   }) {
     final block = <String>[
       '# 由 fl_scx 写入：scx_loader 启动时自动应用的调度器与模式',
@@ -105,24 +110,88 @@ class LoaderConfig {
       'default_mode = "${mode.tomlName}"',
     ].join('\n');
 
-    final body = source
+    var body = source
         .replaceAll(_managedHeaderPattern, '')
         .replaceAll(_defaultLinesPattern, '')
         .trim();
+    if (args.isNotEmpty) {
+      body = _upsertModeArgs(body, scheduler: scheduler, mode: mode, args: args);
+    }
     if (body.isEmpty) {
       return '$block\n';
     }
     return '$block\n\n$body\n';
   }
 
-  /// 写入默认调度器与模式，返回错误信息，成功返回 null。
+  /// 在 `[scheds.<scheduler>]` 段内写入/更新指定模式的参数数组；
+  /// 段不存在时在末尾追加，其它内容保持不变。
+  static String _upsertModeArgs(
+    String body, {
+    required String scheduler,
+    required SchedMode mode,
+    required List<String> args,
+  }) {
+    final key = mode.configKey;
+    final value = '[${args.map(_tomlStringValue).join(', ')}]';
+    final lines = body.split('\n');
+
+    final headerIndex = lines.indexWhere(
+      (line) => _isSectionHeader(line, scheduler),
+    );
+    if (headerIndex == -1) {
+      return '${body.trimRight()}\n\n[scheds.$scheduler]\n$key = $value\n';
+    }
+
+    var sectionEnd = lines.length;
+    for (var i = headerIndex + 1; i < lines.length; i++) {
+      if (lines[i].trimLeft().startsWith('[')) {
+        sectionEnd = i;
+        break;
+      }
+    }
+
+    final keyPattern = RegExp('^[ \t]*${RegExp.escape(key)}[ \t]*=');
+    final keyIndex = () {
+      for (var i = headerIndex + 1; i < sectionEnd; i++) {
+        if (keyPattern.hasMatch(lines[i])) {
+          return i;
+        }
+      }
+      return -1;
+    }();
+    if (keyIndex != -1) {
+      lines[keyIndex] = '$key = $value';
+    } else {
+      lines.insert(sectionEnd, '$key = $value');
+    }
+    return lines.join('\n');
+  }
+
+  static bool _isSectionHeader(String line, String scheduler) {
+    final trimmed = line.trim();
+    return trimmed == '[scheds.$scheduler]' ||
+        trimmed == "[scheds.'$scheduler']" ||
+        trimmed == '[scheds."$scheduler"]';
+  }
+
+  /// 将字符串编码为 TOML 双引号字符串。
+  static String _tomlStringValue(String value) =>
+      '"${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+
+  /// 写入默认调度器与模式（可携带自定义参数），返回错误信息，成功返回 null。
   Future<String?> writeDefaults({
     required String scheduler,
     required SchedMode mode,
+    List<String> args = const <String>[],
   }) async {
     final path = await locatePath();
     final source = await readText(path) ?? '';
-    final updated = applyDefaults(source, scheduler: scheduler, mode: mode);
+    final updated = applyDefaults(
+      source,
+      scheduler: scheduler,
+      mode: mode,
+      args: args,
+    );
     return _writer.writeText(path, updated);
   }
 }

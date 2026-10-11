@@ -237,5 +237,83 @@ auto_mode = ["--autopilot"]
       );
       expect(twice, once);
     });
+
+    test('五种模式名称与 scx_loader 配置格式一致', () {
+      for (final mode in SchedMode.values) {
+        final text = config.applyDefaults(
+          '',
+          scheduler: 'scx_lavd',
+          mode: mode,
+        );
+        expect(text, contains('default_mode = "${mode.tomlName}"'));
+      }
+    });
+
+    test('configKey 与 scx_loader 配置键名一致', () {
+      expect(SchedMode.auto.configKey, 'auto_mode');
+      expect(SchedMode.gaming.configKey, 'gaming_mode');
+      expect(SchedMode.powerSave.configKey, 'powersave_mode');
+      expect(SchedMode.lowLatency.configKey, 'lowlatency_mode');
+      expect(SchedMode.server.configKey, 'server_mode');
+    });
+
+    test('自定义参数会写入所选模式的配置数组且保留其它模式', () {
+      const source = '''
+default_sched = "scx_lavd"
+default_mode = "Auto"
+
+[scheds.scx_lavd]
+auto_mode = ["--autopilot"]
+''';
+      final text = config.applyDefaults(
+        source,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.gaming,
+        args: ['-m', 'performance', '-w'],
+      );
+      expect(text, contains('default_mode = "Gaming"'));
+      expect(text, contains('gaming_mode = ["-m", "performance", "-w"]'));
+      expect(text, contains('auto_mode = ["--autopilot"]'));
+      expect('gaming_mode'.allMatches(text).length, 1);
+    });
+
+    test('目标调度器缺少 scheds 段时自动追加新段', () {
+      final text = config.applyDefaults(
+        '# 仅有注释',
+        scheduler: 'scx_cosmos',
+        mode: SchedMode.auto,
+        args: ['-s', '700'],
+      );
+      expect(text, contains('[scheds.scx_cosmos]'));
+      expect(text, contains('auto_mode = ["-s", "700"]'));
+      expect(text, contains('default_sched = "scx_cosmos"'));
+    });
+
+    test('已有模式参数会被更新且不重复', () {
+      const source = '''
+[scheds.scx_lavd]
+gaming_mode = ["--old"]
+auto_mode = ["--autopilot"]
+''';
+      final text = config.applyDefaults(
+        source,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.gaming,
+        args: ['--new'],
+      );
+      expect(text, contains('gaming_mode = ["--new"]'));
+      expect('gaming_mode'.allMatches(text).length, 1);
+      expect(text, contains('auto_mode = ["--autopilot"]'));
+    });
+
+    test('参数中的引号与反斜杠会被转义', () {
+      final text = config.applyDefaults(
+        '',
+        scheduler: 'scx_lavd',
+        mode: SchedMode.auto,
+        args: ['a"b', r'c\d'],
+      );
+      expect(text, contains(r'auto_mode = ["a\"b", "c\\d"]'));
+    });
   });
 }

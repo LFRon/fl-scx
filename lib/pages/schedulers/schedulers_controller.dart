@@ -71,10 +71,13 @@ class SchedulersController extends GetxController {
       return '尚未选择调度器';
     }
 
+    // 用户自定义参数同时用于运行时切换与（若勾选）开机默认配置。
+    final args = splitArgs(customArgs.text);
+
     final error = await app.switchScheduler(
       scheduler: scheduler,
       mode: mode.value,
-      args: splitArgs(customArgs.text),
+      args: args,
     );
     if (error != null) {
       return error;
@@ -86,6 +89,7 @@ class SchedulersController extends GetxController {
     final configError = await app.saveDefaultScheduler(
       scheduler: scheduler,
       mode: mode.value,
+      args: args,
     );
     if (configError != null) {
       return '已切换调度器，但写入开机默认失败：$configError';

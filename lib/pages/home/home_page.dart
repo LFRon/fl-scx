@@ -24,7 +24,7 @@ class HomePage extends GetView<ScxAppState> {
       appBar: AppBar(
         title: DefaultTextStyle.merge(
           // 顶栏标题字号在此调整（继承主题颜色与字重）。
-          style: const TextStyle(fontSize: 18),
+          style: const TextStyle(fontSize: 17),
           child: const Text('SCX 调度管理器'),
         ),
         actions: [

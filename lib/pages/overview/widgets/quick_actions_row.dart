@@ -7,7 +7,7 @@ import '../../../backend/models/scheduler_operation.dart';
 import '../../../widgets/action_feedback.dart';
 import '../../schedulers/schedulers_controller.dart';
 
-/// 概览页快捷操作按钮组（需在 [Obx] 作用域内使用）。
+/// 概览页快捷操作按钮组。
 ///
 /// 调度器运行时显示“停止调度器”；停止后该位置变为可点击的
 /// “启动调度器”，启动目标为“调度器”页当前选中的调度器
@@ -15,6 +15,10 @@ import '../../schedulers/schedulers_controller.dart';
 ///
 /// 操作进行中时对应按钮显示加载动画与“启动中/停止中/…”文字，
 /// 并保持禁用，直到内核调度状态收敛。
+///
+/// 注意：本组件自带 [Obx]（GetX 只追踪 Obx builder 函数内直接发生的
+/// Rx 读取，子组件 build 里的读取不会被祖先 Obx 记录），
+/// 否则 busy/activeOperation 变化时按钮状态不会刷新。
 class QuickActionsRow extends StatelessWidget {
   const QuickActionsRow({super.key, required this.state});
 
@@ -22,98 +26,104 @@ class QuickActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final snapshot = state.snapshot.value;
-    final operation = state.activeOperation.value;
-    final disabled = state.busy.value || !snapshot.daemonAvailable;
-    final running = snapshot.schedulerRunning;
-
     final schedulers = Get.find<SchedulersController>();
-    final startTarget = schedulers.selected.value;
-    final canStart =
-        !disabled && (startTarget != null || snapshot.hasDefaultScheduler);
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        if (running)
-          FilledButton.icon(
-            onPressed: disabled
-                ? null
-                : () => runBackendAction(
-                    context,
-                    state.restartScheduler,
-                    successMessage: '已重启当前调度器',
-                  ),
-            icon: operation == SchedulerOperation.restart
-                ? _spinner
-                : const Icon(YaruIcons.refresh),
-            label: Text(
-              operation == SchedulerOperation.restart
-                  ? SchedulerOperation.restart.label
-                  : '重启调度器',
-            ),
-          )
-        else
-          Tooltip(
-            message: startTarget != null
-                ? '启动 $startTarget（${schedulers.mode.value.label} 模式）'
-                : '启动配置文件中的默认调度器',
-            child: FilledButton.icon(
-              onPressed: canStart
-                  ? () => runBackendAction(
+    return Obx(() {
+      final snapshot = state.snapshot.value;
+      final operation = state.activeOperation.value;
+      final disabled = state.busy.value || !snapshot.daemonAvailable;
+      final running = snapshot.schedulerRunning;
+
+      // 启动/切换进行中时，即使快照已瞬时变为“运行中”，
+      // 也保持展示带加载动画的启动/切换按钮，避免反馈丢失。
+      final startActive =
+          operation == SchedulerOperation.start ||
+          operation == SchedulerOperation.switchTo;
+      final showRunningActions = running && !startActive;
+
+      final startTarget = schedulers.selected.value;
+      final canStart =
+          !disabled && (startTarget != null || snapshot.hasDefaultScheduler);
+
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          if (showRunningActions)
+            FilledButton.icon(
+              onPressed: disabled
+                  ? null
+                  : () => runBackendAction(
                       context,
-                      () => _start(schedulers),
-                      successMessage: '已启动调度器',
-                    )
-                  : null,
-              icon: operation == SchedulerOperation.start
+                      state.restartScheduler,
+                      successMessage: '已重启当前调度器',
+                    ),
+              icon: operation == SchedulerOperation.restart
                   ? _spinner
-                  : const Icon(Icons.play_arrow),
+                  : const Icon(YaruIcons.refresh),
               label: Text(
-                operation == SchedulerOperation.start
-                    ? SchedulerOperation.start.label
-                    : '启动调度器',
+                operation == SchedulerOperation.restart
+                    ? SchedulerOperation.restart.label
+                    : '重启调度器',
+              ),
+            )
+          else
+            Tooltip(
+              message: startTarget != null
+                  ? '启动 $startTarget（${schedulers.mode.value.label} 模式）'
+                  : '启动配置文件中的默认调度器',
+              child: FilledButton.icon(
+                onPressed: canStart
+                    ? () => runBackendAction(
+                        context,
+                        () => _start(schedulers),
+                        successMessage: '已启动调度器',
+                      )
+                    : null,
+                icon: startActive
+                    ? _spinner
+                    : const Icon(Icons.play_arrow),
+                label: Text(startActive ? operation!.label : '启动调度器'),
               ),
             ),
-          ),
-        if (running)
+          if (showRunningActions)
+            OutlinedButton.icon(
+              onPressed: disabled
+                  ? null
+                  : () => runBackendAction(
+                      context,
+                      state.stopScheduler,
+                      successMessage: '已停止当前调度器',
+                    ),
+              icon: operation == SchedulerOperation.stop
+                  ? _spinner
+                  : const Icon(YaruIcons.stop),
+              label: Text(
+                operation == SchedulerOperation.stop
+                    ? SchedulerOperation.stop.label
+                    : '停止调度器',
+              ),
+            ),
           OutlinedButton.icon(
-            onPressed: disabled
-                ? null
-                : () => runBackendAction(
+            onPressed: (!disabled && snapshot.hasDefaultScheduler)
+                ? () => runBackendAction(
                     context,
-                    state.stopScheduler,
-                    successMessage: '已停止当前调度器',
-                  ),
-            icon: operation == SchedulerOperation.stop
+                    state.restoreDefault,
+                    successMessage: '已恢复默认调度器',
+                  )
+                : null,
+            icon: operation == SchedulerOperation.restore
                 ? _spinner
-                : const Icon(YaruIcons.stop),
+                : const Icon(YaruIcons.undo),
             label: Text(
-              operation == SchedulerOperation.stop
-                  ? SchedulerOperation.stop.label
-                  : '停止调度器',
+              operation == SchedulerOperation.restore
+                  ? SchedulerOperation.restore.label
+                  : '恢复默认调度',
             ),
           ),
-        OutlinedButton.icon(
-          onPressed: (!disabled && snapshot.hasDefaultScheduler)
-              ? () => runBackendAction(
-                  context,
-                  state.restoreDefault,
-                  successMessage: '已恢复默认调度器',
-                )
-              : null,
-          icon: operation == SchedulerOperation.restore
-              ? _spinner
-              : const Icon(YaruIcons.undo),
-          label: Text(
-            operation == SchedulerOperation.restore
-                ? SchedulerOperation.restore.label
-                : '恢复默认调度',
-          ),
-        ),
-      ],
-    );
+        ],
+      );
+    });
   }
 
   static const _spinner = SizedBox(

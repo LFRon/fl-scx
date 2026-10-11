@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../../backend/models/mode_args.dart';
@@ -10,7 +11,11 @@ import '../schedulers_controller.dart';
 import 'mode_args_preview.dart';
 import 'sched_mode_selector.dart';
 
-/// 调度器详情与配置面板（右侧分栏，需在 [Obx] 作用域内使用）。
+/// 调度器详情与配置面板（右侧分栏）。
+///
+/// 自带 [Obx]：GetX 只追踪 Obx builder 函数内直接发生的 Rx 读取，
+/// 本组件读取 busy/activeOperation/模式信息等，需要自己的订阅才能
+/// 在操作进行中正确显示“启动中/切换中”并随之刷新。
 class SchedulerDetailPane extends StatelessWidget {
   const SchedulerDetailPane({
     super.key,
@@ -23,23 +28,25 @@ class SchedulerDetailPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = YaruColors.of(context);
     final app = controller.app;
-    final snapshot = app.snapshot.value;
-    final info = app.infoFor(scheduler);
-    final mode = controller.mode.value;
-    final isRunning =
-        snapshot.schedulerRunning && snapshot.currentScheduler == scheduler;
-    final canApply = !app.busy.value && snapshot.daemonAvailable;
-    final operation = app.activeOperation.value;
-    final applyOperation =
-        (operation == SchedulerOperation.start ||
-            operation == SchedulerOperation.switchTo)
-        ? operation
-        : null;
 
-    return ListView(
+    return Obx(() {
+      final theme = Theme.of(context);
+      final colors = YaruColors.of(context);
+      final snapshot = app.snapshot.value;
+      final info = app.infoFor(scheduler);
+      final mode = controller.mode.value;
+      final isRunning =
+          snapshot.schedulerRunning && snapshot.currentScheduler == scheduler;
+      final canApply = !app.busy.value && snapshot.daemonAvailable;
+      final operation = app.activeOperation.value;
+      final applyOperation =
+          (operation == SchedulerOperation.start ||
+              operation == SchedulerOperation.switchTo)
+          ? operation
+          : null;
+
+      return ListView(
       padding: const EdgeInsets.all(24),
       children: [
         Row(
@@ -150,8 +157,9 @@ class SchedulerDetailPane extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-      ],
-    );
+        ],
+      );
+    });
   }
 
   Future<void> _apply(

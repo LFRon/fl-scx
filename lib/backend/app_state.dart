@@ -66,6 +66,10 @@ class ScxAppState extends GetxController {
   static const _settleTimeout = Duration(seconds: 10);
   static const _settleInterval = Duration(milliseconds: 600);
 
+  /// “进行中”状态的最短展示时长：像“重启”这类瞬间完成的操作用户
+  /// 也能看到“重启中”的反馈。
+  static const _minOperationFeedback = Duration(milliseconds: 600);
+
   final ScxLoaderClient _client;
   final KernelSchedExt _kernel;
   final PrivilegedHelper _helper;
@@ -355,7 +359,11 @@ class ScxAppState extends GetxController {
     try {
       error = await _perform(action);
       if (error == null) {
-        await _awaitKernelSettled(settled);
+        // 等待内核状态收敛，并保证“进行中”反馈至少可见一小段时间。
+        await Future.wait([
+          _awaitKernelSettled(settled),
+          Future<void>.delayed(_minOperationFeedback),
+        ]);
       }
     } finally {
       activeOperation.value = null;

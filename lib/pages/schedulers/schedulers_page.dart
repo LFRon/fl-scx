@@ -54,12 +54,33 @@ class SchedulersPage extends StatelessWidget {
                   ),
                   const VerticalDivider(width: 1),
                   Expanded(
-                    child: selected == null
-                        ? const Center(child: Text('请选择一个调度器'))
-                        : SchedulerDetailPane(
-                            controller: controller,
-                            scheduler: selected,
-                          ),
+                    // 子页面切换沿用 Yaru 原生路由过渡：内嵌声明式
+                    // Navigator 并指定 YaruPageTransitionsTheme.vertical，
+                    // 与 YaruMasterDetailPage 的页面切换动画完全一致
+                    // （旧页面淡出先露出背景色，新页面自下方滑入）。
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        pageTransitionsTheme: YaruPageTransitionsTheme.vertical,
+                      ),
+                      child: Navigator(
+                        onDidRemovePage: (page) {},
+                        pages: [
+                          if (selected == null)
+                            const MaterialPage(
+                              key: ValueKey('scheduler-detail-empty'),
+                              child: Center(child: Text('请选择一个调度器')),
+                            )
+                          else
+                            MaterialPage(
+                              key: ValueKey(selected),
+                              child: SchedulerDetailPane(
+                                controller: controller,
+                                scheduler: selected,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               );

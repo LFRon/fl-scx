@@ -5,6 +5,7 @@ import 'package:yaru/yaru.dart';
 import '../../../backend/models/mode_args.dart';
 import '../../../backend/models/scheduler_operation.dart';
 import '../../../widgets/action_feedback.dart';
+import '../../../widgets/button_styles.dart';
 import '../../../widgets/backend_info_box.dart';
 import '../../../widgets/status_chip.dart';
 import '../schedulers_controller.dart';
@@ -82,6 +83,7 @@ class SchedulerDetailPane extends StatelessWidget {
             ),
             IconButton(
               onPressed: controller.reloadSelectedInfo,
+              mouseCursor: SystemMouseCursors.click,
               icon: const Icon(YaruIcons.refresh),
               tooltip: '重新读取模式信息',
             ),
@@ -128,6 +130,7 @@ class SchedulerDetailPane extends StatelessWidget {
           runSpacing: 12,
           children: [
             FilledButton.icon(
+              style: kClickableButtonStyle,
               onPressed: canApply
                   ? () => _apply(context, setAsDefault: false)
                   : null,
@@ -141,6 +144,7 @@ class SchedulerDetailPane extends StatelessWidget {
               label: Text(applyOperation?.label ?? '立即应用'),
             ),
             OutlinedButton.icon(
+              style: kClickableButtonStyle,
               onPressed: canApply
                   ? () => _apply(context, setAsDefault: true)
                   : null,

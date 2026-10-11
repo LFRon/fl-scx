@@ -4,6 +4,7 @@ import 'package:yaru/yaru.dart';
 
 import '../../../backend/app_state.dart';
 import '../../../widgets/action_feedback.dart';
+import '../../../widgets/button_styles.dart';
 import '../../../widgets/status_chip.dart';
 
 /// scx_loader systemd 服务设置。
@@ -67,6 +68,7 @@ class ServiceSection extends GetView<ScxAppState> {
                   ),
                   const SizedBox(width: 12),
                   TextButton(
+                    style: kClickableButtonStyle,
                     onPressed: busy
                         ? null
                         : controller.helperActive.value

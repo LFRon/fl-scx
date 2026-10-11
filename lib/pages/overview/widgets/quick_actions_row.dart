@@ -5,6 +5,7 @@ import 'package:yaru/yaru.dart';
 import '../../../backend/app_state.dart';
 import '../../../backend/models/scheduler_operation.dart';
 import '../../../widgets/action_feedback.dart';
+import '../../../widgets/button_styles.dart';
 import '../../../widgets/recommendation.dart';
 import '../../schedulers/schedulers_controller.dart';
 
@@ -52,6 +53,7 @@ class QuickActionsRow extends StatelessWidget {
         children: [
           if (showRunningActions)
             FilledButton.icon(
+              style: kClickableButtonStyle,
               onPressed: disabled
                   ? null
                   : () => runBackendAction(
@@ -74,6 +76,7 @@ class QuickActionsRow extends StatelessWidget {
                   ? '启动 $startTarget（${schedulers.mode.value.label} 模式）'
                   : '请先在“调度器”页选择调度器',
               child: FilledButton.icon(
+                style: kClickableButtonStyle,
                 onPressed: canStart
                     ? () => runBackendAction(
                         context,
@@ -89,6 +92,7 @@ class QuickActionsRow extends StatelessWidget {
             ),
           if (showRunningActions)
             OutlinedButton.icon(
+              style: kClickableButtonStyle,
               onPressed: disabled
                   ? null
                   : () => runBackendAction(
@@ -106,6 +110,7 @@ class QuickActionsRow extends StatelessWidget {
               ),
             ),
           OutlinedButton.icon(
+            style: kClickableButtonStyle,
             onPressed: disabled
                 ? null
                 : () => runBackendAction(

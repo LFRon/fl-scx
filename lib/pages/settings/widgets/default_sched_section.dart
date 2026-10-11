@@ -5,6 +5,7 @@ import 'package:yaru/yaru.dart';
 import '../../../backend/models/mode_args.dart';
 import '../../../backend/models/sched_mode.dart';
 import '../../../widgets/action_feedback.dart';
+import '../../../widgets/button_styles.dart';
 import 'default_sched_controller.dart';
 
 /// 开机默认调度设置（写入 scx_loader 配置文件）。
@@ -79,6 +80,7 @@ class DefaultSchedSection extends StatelessWidget {
               child: Row(
                 children: [
                   FilledButton.icon(
+                    style: kClickableButtonStyle,
                     onPressed: (busy || scheduler == null)
                         ? null
                         : () => runBackendAction(

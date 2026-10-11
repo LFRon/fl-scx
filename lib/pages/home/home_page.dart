@@ -44,6 +44,7 @@ class HomePage extends GetView<ScxAppState> {
           ),
           IconButton(
             onPressed: controller.reload,
+            mouseCursor: SystemMouseCursors.click,
             icon: const Icon(YaruIcons.refresh),
             tooltip: '刷新',
           ),

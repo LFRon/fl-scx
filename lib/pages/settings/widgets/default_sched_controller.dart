@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 import '../../../backend/app_state.dart';
@@ -22,11 +21,9 @@ class DefaultSchedController extends GetxController {
   void onInit() {
     super.onInit();
     _snapshotWorker = ever(app.snapshot, (_) => _syncFromSnapshot());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!isClosed) {
-        _syncFromSnapshot();
-      }
-    });
+    // 在界面构建前（应用引导阶段）直接同步初始值：此时尚无组件订阅，
+    // 不会出现构建期标脏；并保证启动预热帧渲染的是真实内容。
+    _syncFromSnapshot();
   }
 
   @override

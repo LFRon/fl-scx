@@ -32,11 +32,10 @@ class SchedulersController extends GetxController {
     super.onInit();
     _snapshotWorker = ever(app.snapshot, (_) => _syncSelection());
     _infoWorker = ever(app.schedulerInfos, (_) => _validateMode());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!isClosed) {
-        _syncSelection();
-      }
-    });
+    // 在界面构建前（应用引导阶段）直接同步初始选择：此时尚无组件订阅
+    // 这些 Rx，不会出现构建期标脏；同时保证启动预热帧能构建出真实的
+    // 详情面板，首次进入本页不再有小卡顿。
+    _syncSelection();
   }
 
   @override

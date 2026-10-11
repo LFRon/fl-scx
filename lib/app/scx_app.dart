@@ -5,6 +5,7 @@ import 'package:yaru/yaru.dart';
 
 import '../pages/home/home_page.dart';
 import 'app_bindings.dart';
+import 'startup_warmup.dart';
 
 /// 应用根组件：套用 Yaru 主题（跟随系统亮/暗色与强调色），
 /// 并通过 GetX 注入状态控制器。
@@ -30,7 +31,7 @@ class ScxApp extends StatelessWidget {
             PointerDeviceKind.stylus,
           },
         ),
-        home: const HomePage(),
+        home: const StartupWarmup(child: HomePage()),
       ),
     );
   }

@@ -131,7 +131,8 @@ class SchedulerDetailPane extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          '提示：切换调度器需要 polkit 授权；写入开机默认会修改 scx_loader 配置文件，同样需要授权。',
+          '提示：本次运行首次特权操作会弹出一次管理员授权（pkexec），'
+          '之后切换调度器、写入开机默认等操作均不再重复询问；切换仍由 scx_loader 完成。',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

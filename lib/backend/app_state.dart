@@ -8,6 +8,9 @@ import 'dbus/scx_loader_client.dart';
 import 'kernel/kernel_sched_ext.dart';
 import 'models/sched_mode.dart';
 import 'models/scx_snapshot.dart';
+import 'system/privileged_file_writer.dart';
+import 'system/privileged_helper.dart';
+import 'system/scx_control_service.dart';
 import 'system/systemd_controller.dart';
 
 /// 后端聚合状态：负责采集 scx / scx_loader / 内核 / systemd 信息，
@@ -15,18 +18,42 @@ import 'system/systemd_controller.dart';
 ///
 /// 所有命令返回 `null` 表示成功，否则返回可展示的错误信息。
 ///
+/// 涉及 root 权限的操作统一经过 [PrivilegedHelper]：本次运行内首次
+/// 操作弹出一次 pkexec 授权，之后复用管理员会话，直到应用退出。
+///
 /// 注意：控制器的状态变更（Rx 赋值）必须在构建阶段之外触发；
 /// 页面初始同步请使用 post-frame 回调，避免在 build 期间标脏祖先组件。
 class ScxAppState extends GetxController {
-  ScxAppState({
+  factory ScxAppState({
     ScxLoaderClient? client,
     KernelSchedExt? kernel,
+    PrivilegedHelper? helper,
     SystemdController? systemd,
     LoaderConfig? config,
-  }) : _client = client ?? ScxLoaderClient(),
-       _kernel = kernel ?? KernelSchedExt(),
-       _systemd = systemd ?? SystemdController(),
-       _config = config ?? LoaderConfig();
+    ScxControlService? control,
+  }) {
+    final loader = client ?? ScxLoaderClient();
+    final privileged = helper ?? PrivilegedHelper();
+    return ScxAppState._(
+      client: loader,
+      kernel: kernel ?? KernelSchedExt(),
+      helper: privileged,
+      systemd: systemd ?? SystemdController(helper: privileged),
+      config:
+          config ??
+          LoaderConfig(writer: PrivilegedFileWriter(helper: privileged)),
+      control: control ?? ScxControlService(dbus: loader, helper: privileged),
+    );
+  }
+
+  ScxAppState._({
+    required this._client,
+    required this._kernel,
+    required this._helper,
+    required this._systemd,
+    required this._config,
+    required this._control,
+  });
 
   /// 单次后端读取的超时时间。
   static const _readTimeout = Duration(seconds: 6);
@@ -36,8 +63,10 @@ class ScxAppState extends GetxController {
 
   final ScxLoaderClient _client;
   final KernelSchedExt _kernel;
+  final PrivilegedHelper _helper;
   final SystemdController _systemd;
   final LoaderConfig _config;
+  final ScxControlService _control;
   Timer? _refreshTimer;
 
   /// 最近一次刷新得到的系统快照。
@@ -45,6 +74,9 @@ class ScxAppState extends GetxController {
 
   /// 是否有后端操作正在执行。
   final busy = false.obs;
+
+  /// 管理员会话（root 辅助进程）是否已激活。
+  final helperActive = false.obs;
 
   /// 各调度器的模式信息缓存（按调度器名索引）。
   final schedulerInfos = <String, SchedulerInfo>{}.obs;
@@ -55,6 +87,10 @@ class ScxAppState extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _helper.onActiveChanged = () {
+      helperActive.value = _helper.isActive;
+    };
+    helperActive.value = _helper.isActive;
     reload();
     _refreshTimer = Timer.periodic(_refreshInterval, (_) => reload());
   }
@@ -62,6 +98,7 @@ class ScxAppState extends GetxController {
   @override
   void onClose() {
     _refreshTimer?.cancel();
+    unawaited(_helper.stop());
     unawaited(_client.close());
     super.onClose();
   }
@@ -70,6 +107,32 @@ class ScxAppState extends GetxController {
   SchedulerInfo infoFor(String scheduler) =>
       schedulerInfos[scheduler] ??
       SchedulerInfo(name: scheduler, loading: true);
+
+  // ---------------------------------------------------------------------------
+  // 管理员会话
+  // ---------------------------------------------------------------------------
+
+  /// 预先激活管理员会话（弹出一次 pkexec 授权），成功返回 null。
+  Future<String?> activateHelper() async {
+    busy.value = true;
+    try {
+      await _helper.ensureActive();
+      return null;
+    } on HelperStartException catch (error) {
+      return error.message;
+    } catch (error) {
+      return '管理员会话启动失败：$error';
+    } finally {
+      busy.value = false;
+      helperActive.value = _helper.isActive;
+    }
+  }
+
+  /// 结束管理员会话；之后的特权操作会重新请求授权。
+  Future<void> deactivateHelper() async {
+    await _helper.stop();
+    helperActive.value = _helper.isActive;
+  }
 
   // ---------------------------------------------------------------------------
   // 信息刷新
@@ -178,7 +241,8 @@ class ScxAppState extends GetxController {
   }
 
   // ---------------------------------------------------------------------------
-  // scx_loader 控制命令（D-Bus，可能需要 polkit 授权）
+  // scx_loader 控制命令
+  // （优先经管理员会话调用 scxctl，仍由 scx_loader 生效；不可用时回退 D-Bus）
   // ---------------------------------------------------------------------------
 
   /// 切换调度器：`args` 为空时使用 [mode] 的预设参数。
@@ -186,67 +250,59 @@ class ScxAppState extends GetxController {
     required String scheduler,
     required SchedMode mode,
     List<String> args = const <String>[],
-  }) => _run(
-    () => args.isEmpty
-        ? _client.switchScheduler(scheduler, mode)
-        : _client.switchSchedulerWithArgs(scheduler, args),
+  }) => _execute(
+    () => _control.switchScheduler(scheduler: scheduler, mode: mode, args: args),
   );
 
   /// 停止当前调度器。
-  Future<String?> stopScheduler() => _run(_client.stopScheduler);
+  Future<String?> stopScheduler() => _execute(_control.stopScheduler);
 
   /// 按原配置重启当前调度器。
-  Future<String?> restartScheduler() => _run(_client.restartScheduler);
+  Future<String?> restartScheduler() => _execute(_control.restartScheduler);
 
   /// 恢复配置文件中设置的默认调度器。
-  Future<String?> restoreDefault() => _run(_client.restoreDefault);
+  Future<String?> restoreDefault() => _execute(_control.restoreDefault);
 
   // ---------------------------------------------------------------------------
-  // 配置 / systemd 命令（pkexec 授权）
+  // 配置 / systemd 命令（管理员会话）
   // ---------------------------------------------------------------------------
 
   /// 将 [scheduler] + [mode] 写入 scx_loader 配置文件作为开机默认。
   Future<String?> saveDefaultScheduler({
     required String scheduler,
     required SchedMode mode,
-  }) => _runTask(
+  }) => _execute(
     () => _config.writeDefaults(scheduler: scheduler, mode: mode),
   );
 
   /// 启用/禁用 scx_loader 服务开机自启。
   Future<String?> setAutostart(bool enabled) =>
-      _runTask(() => _systemd.setEnabled(enabled));
+      _execute(() => _systemd.setEnabled(enabled));
 
-  /// 执行一个 D-Bus 控制命令：成功后刷新快照。
-  Future<String?> _run(Future<void> Function() action) async {
+  // ---------------------------------------------------------------------------
+  // 命令执行
+  // ---------------------------------------------------------------------------
+
+  /// 执行一个后端命令：管理 [busy]，完成后刷新快照并同步管理员会话状态。
+  Future<String?> _execute(Future<String?> Function() action) async {
     busy.value = true;
+    String? error;
     try {
-      await action();
-      await reload();
-      return null;
-    } on ScxBackendException catch (error) {
-      return error.message;
-    } catch (error) {
-      return describeDBusError(error);
+      error = await action();
+    } on ScxBackendException catch (exception) {
+      error = exception.message;
+    } on HelperStartException catch (exception) {
+      error = exception.message;
+    } catch (exception) {
+      error = describeDBusError(exception);
     } finally {
       busy.value = false;
+      helperActive.value = _helper.isActive;
     }
-  }
-
-  /// 执行一个返回错误信息（或 null）的任务：无论成败都刷新快照，
-  /// 以便界面同步展示配置/服务的最新状态。
-  Future<String?> _runTask(Future<String?> Function() action) async {
-    busy.value = true;
+    // 刷新快照以同步界面；刷新失败不应影响命令结果。
     try {
-      final error = await action();
       await reload();
-      return error;
-    } on ScxBackendException catch (error) {
-      return error.message;
-    } catch (error) {
-      return describeDBusError(error);
-    } finally {
-      busy.value = false;
-    }
+    } catch (_) {}
+    return error;
   }
 }

@@ -49,6 +49,40 @@ class ServiceSection extends GetView<ScxAppState> {
                     : colors.warning,
               ),
             ),
+            YaruListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('管理员会话'),
+              subtitle: const Text(
+                '本次运行首次特权操作弹出一次 pkexec 授权，'
+                '之后切换调度器、写入配置等不再重复询问；应用退出后自动失效',
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StatusChip(
+                    label: controller.helperActive.value ? '已授权' : '未授权',
+                    color: controller.helperActive.value
+                        ? colors.success
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : controller.helperActive.value
+                        ? controller.deactivateHelper
+                        : () => runBackendAction(
+                            context,
+                            controller.activateHelper,
+                            successMessage: '管理员会话已激活',
+                          ),
+                    child: Text(
+                      controller.helperActive.value ? '结束会话' : '立即授权',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       );

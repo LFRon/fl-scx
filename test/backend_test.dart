@@ -22,6 +22,14 @@ void main() {
       expect(SchedMode.fromTomlName('Server'), SchedMode.server);
       expect(SchedMode.fromTomlName('unknown'), SchedMode.auto);
     });
+
+    test('cliName 与 scxctl 取值一致', () {
+      expect(SchedMode.auto.cliName, 'auto');
+      expect(SchedMode.gaming.cliName, 'gaming');
+      expect(SchedMode.powerSave.cliName, 'powersave');
+      expect(SchedMode.lowLatency.cliName, 'lowlatency');
+      expect(SchedMode.server.cliName, 'server');
+    });
   });
 
   group('调度器名称', () {

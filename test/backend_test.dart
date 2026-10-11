@@ -200,5 +200,42 @@ default_mode = "Server"
       expect(text, contains('default_sched = "scx_bpfland"'));
       expect(text, contains('default_mode = "Server"'));
     });
+
+    test('重复应用不会累积管理注释与默认行', () {
+      const source = '''
+# 由 fl_scx 写入：scx_loader 启动时自动应用的调度器与模式
+default_sched = "scx_lavd"
+default_mode = "Auto"
+
+# 原有内容
+[scheds.scx_lavd]
+auto_mode = ["--autopilot"]
+''';
+      final text = config.applyDefaults(
+        source,
+        scheduler: 'scx_cosmos',
+        mode: SchedMode.gaming,
+      );
+      expect('# 由 fl_scx 写入'.allMatches(text).length, 1);
+      expect(text, contains('default_sched = "scx_cosmos"'));
+      expect(text, contains('default_mode = "Gaming"'));
+      expect(text, isNot(contains('scx_lavd"')));
+      expect(text, contains('[scheds.scx_lavd]'));
+      expect(text, contains('auto_mode = ["--autopilot"]'));
+    });
+
+    test('连续两次应用结果稳定（幂等）', () {
+      final once = config.applyDefaults(
+        '',
+        scheduler: 'scx_lavd',
+        mode: SchedMode.auto,
+      );
+      final twice = config.applyDefaults(
+        once,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.auto,
+      );
+      expect(twice, once);
+    });
   });
 }

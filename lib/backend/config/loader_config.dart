@@ -46,6 +46,12 @@ class LoaderConfig {
     multiLine: true,
   );
 
+  /// 上次由本应用写入的管理注释横幅（重复应用时先移除，避免累积）。
+  static final _managedHeaderPattern = RegExp(
+    r'^[ \t]*# 由 fl_scx 写入[^\n]*\n?',
+    multiLine: true,
+  );
+
   final PrivilegedFileWriter _writer;
 
   /// 找到实际存在的配置文件路径，否则返回 [defaultPath]。
@@ -85,6 +91,9 @@ class LoaderConfig {
   }
 
   /// 在 [source] 基础上更新默认调度设置，保留其余内容。
+  ///
+  /// 重复应用时先移除上次写入的管理注释横幅与 default_* 行，
+  /// 避免注释与空行不断累积（结果幂等）。
   String applyDefaults(
     String source, {
     required String scheduler,
@@ -96,8 +105,10 @@ class LoaderConfig {
       'default_mode = "${mode.tomlName}"',
     ].join('\n');
 
-    var body = source.replaceAll(_defaultLinesPattern, '');
-    body = body.trimLeft();
+    final body = source
+        .replaceAll(_managedHeaderPattern, '')
+        .replaceAll(_defaultLinesPattern, '')
+        .trim();
     if (body.isEmpty) {
       return '$block\n';
     }

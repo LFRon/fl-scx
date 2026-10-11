@@ -3,11 +3,10 @@ import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../backend/app_state.dart';
-import 'widgets/about_section.dart';
 import 'widgets/default_sched_section.dart';
 import 'widgets/service_section.dart';
 
-/// 设置页：服务自启动、开机默认调度与关于信息。
+/// 设置页：服务自启动与开机默认调度。
 class SettingsPage extends GetView<ScxAppState> {
   const SettingsPage({super.key});
 
@@ -21,8 +20,6 @@ class SettingsPage extends GetView<ScxAppState> {
           ServiceSection(),
           SizedBox(height: 16),
           DefaultSchedSection(),
-          SizedBox(height: 16),
-          AboutSection(),
         ],
       ),
     );

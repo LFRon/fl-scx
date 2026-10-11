@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../pages/about/about_page.dart';
 import '../pages/schedulers/schedulers_page.dart';
 import '../pages/settings/settings_page.dart';
 
@@ -42,6 +43,7 @@ class _StartupWarmupState extends State<StartupWarmup> {
       children: [
         IgnorePointer(child: ExcludeSemantics(child: const SchedulersPage())),
         IgnorePointer(child: ExcludeSemantics(child: const SettingsPage())),
+        IgnorePointer(child: ExcludeSemantics(child: const AboutPage())),
         widget.child,
       ],
     );

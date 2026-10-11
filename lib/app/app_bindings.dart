@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 
 import '../backend/app_state.dart';
+import '../pages/home/home_controller.dart';
 import '../pages/schedulers/schedulers_controller.dart';
 import '../pages/settings/widgets/default_sched_controller.dart';
 
@@ -13,6 +14,7 @@ class AppBindings extends Bindings {
     final appState = Get.isRegistered<ScxAppState>()
         ? Get.find<ScxAppState>()
         : Get.put<ScxAppState>(ScxAppState(), permanent: true);
+    Get.put<HomeController>(HomeController(), permanent: true);
     Get.put<SchedulersController>(
       SchedulersController(appState),
       permanent: true,

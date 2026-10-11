@@ -40,6 +40,12 @@ const homeSections = <HomeSection>[
   ),
 ];
 
+/// 双行条目的 CJK 文字墨迹在行盒内偏下（约 3 逻辑像素），
+/// 使“图标+两行文字”整体视觉重心低于 Yaru 选项框中心；
+/// 将标题/副标题绘制上移 3px 后，图标中心与文字视觉中间
+/// 同时落在选项框中心（仅影响绘制，不影响布局）。
+const _twoLineTextShift = Offset(0, -3);
+
 /// 构建侧边栏条目；“关于”索引由底部条目承载，返回空占位。
 Widget buildHomeMasterTile(BuildContext context, int index, bool selected) {
   if (index == HomeController.aboutIndex) {
@@ -48,7 +54,13 @@ Widget buildHomeMasterTile(BuildContext context, int index, bool selected) {
   final section = homeSections[index];
   return YaruMasterTile(
     leading: Icon(selected ? section.selectedIcon : section.icon),
-    title: Text(section.title),
-    subtitle: Text(section.subtitle),
+    title: Transform.translate(
+      offset: _twoLineTextShift,
+      child: Text(section.title),
+    ),
+    subtitle: Transform.translate(
+      offset: _twoLineTextShift,
+      child: Text(section.subtitle),
+    ),
   );
 }

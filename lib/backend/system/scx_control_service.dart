@@ -27,24 +27,46 @@ class ScxControlService {
   String? _scxctlPath;
   bool _scxctlResolved = false;
 
-  /// 切换调度器：`args` 为空时使用 [mode] 的预设参数。
+  /// 切换/启动调度器：`args` 为空时使用 [mode] 的预设参数。
+  ///
+  /// scxctl 的 `switch` 要求当前已有调度器在运行，停止状态下必须改用
+  /// `start`，因此这里先查询运行状态再选择子命令。
   Future<String?> switchScheduler({
     required String scheduler,
     required SchedMode mode,
     List<String> args = const <String>[],
-  }) {
-    final argv = <String>['switch', '--sched', scheduler];
-    if (args.isEmpty) {
-      argv.addAll(['--mode', mode.cliName]);
-    } else {
-      argv.addAll(['--args', args.join(',')]);
-    }
+  }) async {
+    final startFresh = await _isNoSchedulerRunning();
     return _run(
-      argv,
+      buildArguments(
+        start: startFresh,
+        scheduler: scheduler,
+        mode: mode,
+        args: args,
+      ),
       () => args.isEmpty
           ? _dbus.switchScheduler(scheduler, mode)
           : _dbus.switchSchedulerWithArgs(scheduler, args),
     );
+  }
+
+  /// 构建 `scxctl start|switch` 的参数列表。
+  ///
+  /// 注意：clap 不接受以 `-` 开头的分离参数值，`--args` 必须使用
+  /// 内联 `--args=...` 形式，否则会被当作选项解析。
+  static List<String> buildArguments({
+    required bool start,
+    required String scheduler,
+    required SchedMode mode,
+    List<String> args = const <String>[],
+  }) {
+    final argv = <String>[start ? 'start' : 'switch', '--sched', scheduler];
+    if (args.isEmpty) {
+      argv.addAll(['--mode', mode.cliName]);
+    } else {
+      argv.add('--args=${args.join(',')}');
+    }
+    return argv;
   }
 
   /// 停止当前调度器。
@@ -88,6 +110,18 @@ class ScxControlService {
       return error.message;
     } catch (error) {
       return describeDBusError(error);
+    }
+  }
+
+  /// 当前是否没有调度器在运行（此时应使用 scxctl start 而不是 switch）。
+  Future<bool> _isNoSchedulerRunning() async {
+    try {
+      final current = await _dbus.currentScheduler();
+      return current.isEmpty ||
+          current == ScxLoaderClient.unknownScheduler;
+    } catch (_) {
+      // 读取失败时保守使用 switch（运行中的场景更常见）。
+      return false;
     }
   }
 

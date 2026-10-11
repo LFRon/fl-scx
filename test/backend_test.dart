@@ -3,6 +3,7 @@ import 'package:test/test.dart';
 import 'package:fl_scx/backend/config/loader_config.dart';
 import 'package:fl_scx/backend/models/mode_args.dart';
 import 'package:fl_scx/backend/models/sched_mode.dart';
+import 'package:fl_scx/backend/system/scx_control_service.dart';
 
 void main() {
   group('SchedMode', () {
@@ -29,6 +30,42 @@ void main() {
       expect(SchedMode.powerSave.cliName, 'powersave');
       expect(SchedMode.lowLatency.cliName, 'lowlatency');
       expect(SchedMode.server.cliName, 'server');
+    });
+  });
+
+  group('ScxControlService.buildArguments', () {
+    test('运行时使用 switch 并传递 --mode', () {
+      final argv = ScxControlService.buildArguments(
+        start: false,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.gaming,
+      );
+      expect(argv, ['switch', '--sched', 'scx_lavd', '--mode', 'gaming']);
+    });
+
+    test('停止状态使用 start（scxctl 的 switch 在无运行调度器时会失败）', () {
+      final argv = ScxControlService.buildArguments(
+        start: true,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.auto,
+      );
+      expect(argv, ['start', '--sched', 'scx_lavd', '--mode', 'auto']);
+    });
+
+    test('自定义参数使用内联 --args=... 形式（避免被当作选项）', () {
+      final argv = ScxControlService.buildArguments(
+        start: false,
+        scheduler: 'scx_lavd',
+        mode: SchedMode.auto,
+        args: ['-m', 'performance', '-w'],
+      );
+      expect(argv, [
+        'switch',
+        '--sched',
+        'scx_lavd',
+        '--args=-m,performance,-w',
+      ]);
+      expect(argv, isNot(contains('--mode')));
     });
   });
 

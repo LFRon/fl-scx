@@ -17,6 +17,10 @@ class DefaultSchedController extends GetxController {
 
   Worker? _snapshotWorker;
 
+  /// 上一次已同步进编辑器的配置默认值（用于识别配置是否真正变化）。
+  String? _syncedScheduler;
+  SchedMode? _syncedMode;
+
   @override
   void onInit() {
     super.onInit();
@@ -53,22 +57,39 @@ class DefaultSchedController extends GetxController {
     return app.saveDefaultScheduler(scheduler: target, mode: mode.value);
   }
 
-  /// 首次填值：优先使用配置文件中已有的默认调度设置。
+  /// 同步编辑器与配置文件中的实际默认值：
+  ///
+  /// - 配置中的默认值发生变化时（例如在调度器页“应用并设为开机默认”、
+  ///   或外部修改了 config.toml），跟随更新，保证界面展示与配置文件
+  ///   不脱节；
+  /// - 配置未变化时保留用户正在选择、尚未保存的值，避免周期刷新抢改。
   void _syncFromSnapshot() {
     final snapshot = app.snapshot.value;
     final supported = snapshot.supportedSchedulers;
 
+    if (snapshot.hasDefaultScheduler) {
+      final changed =
+          snapshot.defaultScheduler != _syncedScheduler ||
+          snapshot.defaultMode != _syncedMode;
+      if (!changed) {
+        return;
+      }
+      _syncedScheduler = snapshot.defaultScheduler;
+      _syncedMode = snapshot.defaultMode;
+      scheduler.value = snapshot.defaultScheduler;
+      mode.value = snapshot.defaultMode;
+      return;
+    }
+
+    _syncedScheduler = null;
+    _syncedMode = null;
     final current = scheduler.value;
     if (current == null) {
-      if (snapshot.hasDefaultScheduler) {
-        scheduler.value = snapshot.defaultScheduler;
-        mode.value = snapshot.defaultMode;
-      } else if (supported.isNotEmpty) {
+      if (supported.isNotEmpty) {
         scheduler.value = supported.first;
       }
       return;
     }
-
     if (supported.isNotEmpty && !supported.contains(current)) {
       scheduler.value = supported.first;
     }

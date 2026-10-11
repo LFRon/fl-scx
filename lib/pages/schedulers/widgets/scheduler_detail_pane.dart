@@ -37,6 +37,7 @@ class SchedulerDetailPane extends StatelessWidget {
       final snapshot = app.snapshot.value;
       final info = app.infoFor(scheduler);
       final mode = controller.mode.value;
+      final customArgsInvalid = controller.customArgsInvalid.value;
       final isRunning =
           snapshot.schedulerRunning && snapshot.currentScheduler == scheduler;
       // 本调度器正在运行时的实际模式；使用自定义参数运行时没有
@@ -124,11 +125,35 @@ class SchedulerDetailPane extends StatelessWidget {
         const SizedBox(height: 24),
         Text('自定义参数（可选）', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
+        Text(
+          '填写的参数将直接传给调度器，不再使用上方所选模式的预设参数；'
+          '留空则按所选模式运行。无效参数会导致应用失败并在此标黄提示。',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
         TextField(
           controller: controller.customArgs,
-          decoration: const InputDecoration(
-            hintText: '例如：-m performance -w；留空则使用上方所选模式的预设参数',
-            border: OutlineInputBorder(),
+          onChanged: (_) => controller.onCustomArgsEdited(),
+          decoration: InputDecoration(
+            hintText: '例如：-m performance -w',
+            border: const OutlineInputBorder(),
+            // 应用失败时输入框标黄（自定义参数不合法）。
+            filled: customArgsInvalid,
+            fillColor: customArgsInvalid
+                ? Colors.amber.withValues(alpha: 0.15)
+                : null,
+            enabledBorder: customArgsInvalid
+                ? const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.amber),
+                  )
+                : null,
+            focusedBorder: customArgsInvalid
+                ? const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.amber, width: 2),
+                  )
+                : null,
           ),
         ),
         const SizedBox(height: 24),

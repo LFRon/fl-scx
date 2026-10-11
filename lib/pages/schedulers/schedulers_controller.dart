@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../../backend/app_state.dart';
 import '../../backend/models/sched_mode.dart';
+import '../../backend/models/scx_snapshot.dart';
 import '../../widgets/recommendation.dart';
 
 /// 调度器页的界面状态：当前选中的调度器、模式、自定义参数与操作。
@@ -22,8 +23,11 @@ class SchedulersController extends GetxController {
   /// 期望应用的调度模式。
   final mode = SchedMode.auto.obs;
 
-  /// 自定义参数输入。
+  /// 自定义参数输入（留空则使用所选模式的预设参数）。
   final customArgs = TextEditingController();
+
+  /// 自定义参数应用失败（输入框黄色警示 + 通知“自定义参数不合法”）。
+  final customArgsInvalid = false.obs;
 
   Worker? _snapshotWorker;
   Worker? _infoWorker;
@@ -48,10 +52,20 @@ class SchedulersController extends GetxController {
   }
 
   /// 选择调度器并加载其模式信息。
+  ///
+  /// 若选中的正是运行中的调度器，同步其实际运行状态：模式取守护进程
+  /// 上报值，正在使用自定义参数时将参数回填输入框，便于查看或继续编辑。
   void select(String scheduler) {
     selected.value = scheduler;
+    customArgsInvalid.value = false;
     customArgs.clear();
+    _restoreRunningState(app.snapshot.value, scheduler);
     _loadInfo(scheduler);
+  }
+
+  /// 用户编辑自定义参数：清除失败警示。
+  void onCustomArgsEdited() {
+    customArgsInvalid.value = false;
   }
 
   /// 重新读取当前调度器的模式信息。
@@ -71,8 +85,10 @@ class SchedulersController extends GetxController {
       return '尚未选择调度器';
     }
 
-    // 用户自定义参数同时用于运行时切换与（若勾选）开机默认配置。
+    // 自定义参数同时用于运行时切换与（若勾选）开机默认配置：
+    // 填写后参数将直接传给调度器，留空则使用所选模式的预设参数。
     final args = splitArgs(customArgs.text);
+    customArgsInvalid.value = false;
 
     final error = await app.switchScheduler(
       scheduler: scheduler,
@@ -80,6 +96,10 @@ class SchedulersController extends GetxController {
       args: args,
     );
     if (error != null) {
+      if (args.isNotEmpty) {
+        customArgsInvalid.value = true;
+        return '自定义参数不合法：$error';
+      }
       return error;
     }
     if (!setAsDefault) {
@@ -118,6 +138,20 @@ class SchedulersController extends GetxController {
     }
   }
 
+  /// 若 [scheduler] 正在运行，同步其实际运行状态：模式取守护进程上报的
+  /// 模式（使用自定义参数运行时为 Auto），并把当前生效的自定义参数
+  /// （来自 scx_loader 的 `CurrentSchedulerArgs`）回填输入框。
+  void _restoreRunningState(ScxSnapshot snapshot, String scheduler) {
+    if (!snapshot.schedulerRunning ||
+        snapshot.currentScheduler != scheduler) {
+      return;
+    }
+    mode.value = snapshot.currentMode;
+    if (snapshot.currentArgs.isNotEmpty) {
+      customArgs.text = snapshot.currentArgs.join(' ');
+    }
+  }
+
   /// 确保选中项与最新的支持列表一致；首次进入时优先选中正在运行的调度器。
   void _syncSelection() {
     final snapshot = app.snapshot.value;
@@ -135,7 +169,7 @@ class SchedulersController extends GetxController {
           schedulers.contains(snapshot.currentScheduler);
       selected.value = running ? snapshot.currentScheduler : first;
       if (running) {
-        mode.value = snapshot.currentMode;
+        _restoreRunningState(snapshot, snapshot.currentScheduler);
       }
       _loadInfo(selected.value!);
       return;

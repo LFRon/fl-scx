@@ -7,6 +7,7 @@ import 'dbus/dbus_error_text.dart';
 import 'dbus/scx_loader_client.dart';
 import 'kernel/kernel_sched_ext.dart';
 import 'models/sched_mode.dart';
+import 'models/scheduler_operation.dart';
 import 'models/scx_snapshot.dart';
 import 'system/privileged_file_writer.dart';
 import 'system/privileged_helper.dart';
@@ -61,6 +62,10 @@ class ScxAppState extends GetxController {
   /// 后台自动刷新周期。
   static const _refreshInterval = Duration(seconds: 5);
 
+  /// 等待内核调度状态收敛的超时时间与轮询间隔（600ms，避免过于频繁）。
+  static const _settleTimeout = Duration(seconds: 10);
+  static const _settleInterval = Duration(milliseconds: 600);
+
   final ScxLoaderClient _client;
   final KernelSchedExt _kernel;
   final PrivilegedHelper _helper;
@@ -74,6 +79,9 @@ class ScxAppState extends GetxController {
 
   /// 是否有后端操作正在执行。
   final busy = false.obs;
+
+  /// 当前进行中的调度器控制操作（null 表示空闲）。
+  final activeOperation = Rxn<SchedulerOperation>();
 
   /// 管理员会话（root 辅助进程）是否已激活。
   final helperActive = false.obs;
@@ -250,18 +258,47 @@ class ScxAppState extends GetxController {
     required String scheduler,
     required SchedMode mode,
     List<String> args = const <String>[],
-  }) => _execute(
-    () => _control.switchScheduler(scheduler: scheduler, mode: mode, args: args),
-  );
+  }) {
+    final operation = snapshot.value.schedulerRunning
+        ? SchedulerOperation.switchTo
+        : SchedulerOperation.start;
+    return _runSchedulerOperation(
+      operation,
+      action: () =>
+          _control.switchScheduler(scheduler: scheduler, mode: mode, args: args),
+      settled: (ops) => _opsMatches(ops, scheduler),
+    );
+  }
 
   /// 停止当前调度器。
-  Future<String?> stopScheduler() => _execute(_control.stopScheduler);
+  Future<String?> stopScheduler() => _runSchedulerOperation(
+    SchedulerOperation.stop,
+    action: _control.stopScheduler,
+    settled: (ops) => ops.trim().isEmpty,
+  );
 
   /// 按原配置重启当前调度器。
-  Future<String?> restartScheduler() => _execute(_control.restartScheduler);
+  Future<String?> restartScheduler() => _runSchedulerOperation(
+    SchedulerOperation.restart,
+    action: _control.restartScheduler,
+    // 重启期间 ops 会短暂清空再恢复，等待其重新出现即可。
+    settled: (ops) => ops.trim().isNotEmpty,
+  );
 
   /// 恢复配置文件中设置的默认调度器。
-  Future<String?> restoreDefault() => _execute(_control.restoreDefault);
+  Future<String?> restoreDefault() {
+    final snapshot = this.snapshot.value;
+    final expected = snapshot.hasDefaultScheduler
+        ? snapshot.defaultScheduler
+        : null;
+    return _runSchedulerOperation(
+      SchedulerOperation.restore,
+      action: _control.restoreDefault,
+      settled: (ops) => expected == null
+          ? ops.trim().isNotEmpty
+          : _opsMatches(ops, expected),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // 配置 / systemd 命令（管理员会话）
@@ -280,7 +317,7 @@ class ScxAppState extends GetxController {
       _execute(() => _systemd.setEnabled(enabled));
 
   // ---------------------------------------------------------------------------
-  // 命令执行
+  // 命令执行与状态收敛
   // ---------------------------------------------------------------------------
 
   /// 执行一个后端命令：管理 [busy]，完成后刷新快照并同步管理员会话状态。
@@ -288,21 +325,83 @@ class ScxAppState extends GetxController {
     busy.value = true;
     String? error;
     try {
-      error = await action();
-    } on ScxBackendException catch (exception) {
-      error = exception.message;
-    } on HelperStartException catch (exception) {
-      error = exception.message;
-    } catch (exception) {
-      error = describeDBusError(exception);
+      error = await _perform(action);
     } finally {
       busy.value = false;
       helperActive.value = _helper.isActive;
     }
-    // 刷新快照以同步界面；刷新失败不应影响命令结果。
+    await _safeReload();
+    return error;
+  }
+
+  /// 执行调度器控制命令，并在命令被接受后等待内核实际状态收敛，
+  /// 期间保持 [activeOperation] 让界面显示“启动中/停止中/…”并禁用按钮。
+  ///
+  /// scx_loader 的启停是异步的：D-Bus/scxctl 调用返回只代表命令被接受，
+  /// 必须等待 `/sys/kernel/sched_ext/root/ops` 达到预期状态后再刷新界面，
+  /// 避免旧状态未卸载完成时进行下一步操作导致的瞬时异常。
+  Future<String?> _runSchedulerOperation(
+    SchedulerOperation operation, {
+    required Future<String?> Function() action,
+    required bool Function(String kernelOps) settled,
+  }) async {
+    if (activeOperation.value != null) {
+      return '已有调度器操作正在进行，请稍候';
+    }
+
+    busy.value = true;
+    activeOperation.value = operation;
+    String? error;
+    try {
+      error = await _perform(action);
+      if (error == null) {
+        await _awaitKernelSettled(settled);
+      }
+    } finally {
+      activeOperation.value = null;
+      busy.value = false;
+      helperActive.value = _helper.isActive;
+    }
+    await _safeReload();
+    return error;
+  }
+
+  /// 将后端异常映射为可展示的错误信息。
+  Future<String?> _perform(Future<String?> Function() action) async {
+    try {
+      return await action();
+    } on ScxBackendException catch (exception) {
+      return exception.message;
+    } on HelperStartException catch (exception) {
+      return exception.message;
+    } catch (exception) {
+      return describeDBusError(exception);
+    }
+  }
+
+  /// 轮询内核 sched_ext ops，直到达到预期状态或超时。
+  Future<void> _awaitKernelSettled(
+    bool Function(String kernelOps) settled,
+  ) async {
+    final deadline = DateTime.now().add(_settleTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (settled(await _kernel.runningOps())) {
+        return;
+      }
+      await Future<void>.delayed(_settleInterval);
+    }
+  }
+
+  /// 刷新快照以同步界面；刷新失败不应影响已有结果。
+  Future<void> _safeReload() async {
     try {
       await reload();
     } catch (_) {}
-    return error;
+  }
+
+  /// 判断内核 ops 是否为指定调度器。
+  static bool _opsMatches(String kernelOps, String scheduler) {
+    final ops = kernelOps.trim();
+    return ops == scheduler || ops.startsWith('$scheduler ');
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../../backend/models/mode_args.dart';
+import '../../../backend/models/scheduler_operation.dart';
 import '../../../widgets/action_feedback.dart';
 import '../../../widgets/backend_info_box.dart';
 import '../../../widgets/status_chip.dart';
@@ -31,6 +32,12 @@ class SchedulerDetailPane extends StatelessWidget {
     final isRunning =
         snapshot.schedulerRunning && snapshot.currentScheduler == scheduler;
     final canApply = !app.busy.value && snapshot.daemonAvailable;
+    final operation = app.activeOperation.value;
+    final applyOperation =
+        (operation == SchedulerOperation.start ||
+            operation == SchedulerOperation.switchTo)
+        ? operation
+        : null;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -117,8 +124,14 @@ class SchedulerDetailPane extends StatelessWidget {
               onPressed: canApply
                   ? () => _apply(context, setAsDefault: false)
                   : null,
-              icon: const Icon(YaruIcons.power_filled),
-              label: const Text('立即应用'),
+              icon: applyOperation != null
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(YaruIcons.power_filled),
+              label: Text(applyOperation?.label ?? '立即应用'),
             ),
             OutlinedButton.icon(
               onPressed: canApply

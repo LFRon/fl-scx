@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../../backend/app_state.dart';
+import '../../../backend/models/scheduler_operation.dart';
 import '../../../widgets/action_feedback.dart';
 import '../../schedulers/schedulers_controller.dart';
 
@@ -11,6 +12,9 @@ import '../../schedulers/schedulers_controller.dart';
 /// 调度器运行时显示“停止调度器”；停止后该位置变为可点击的
 /// “启动调度器”，启动目标为“调度器”页当前选中的调度器
 /// （没有选中项时回退到配置文件中的默认调度）。
+///
+/// 操作进行中时对应按钮显示加载动画与“启动中/停止中/…”文字，
+/// 并保持禁用，直到内核调度状态收敛。
 class QuickActionsRow extends StatelessWidget {
   const QuickActionsRow({super.key, required this.state});
 
@@ -19,6 +23,7 @@ class QuickActionsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final snapshot = state.snapshot.value;
+    final operation = state.activeOperation.value;
     final disabled = state.busy.value || !snapshot.daemonAvailable;
     final running = snapshot.schedulerRunning;
 
@@ -40,8 +45,14 @@ class QuickActionsRow extends StatelessWidget {
                     state.restartScheduler,
                     successMessage: '已重启当前调度器',
                   ),
-            icon: const Icon(YaruIcons.refresh),
-            label: const Text('重启调度器'),
+            icon: operation == SchedulerOperation.restart
+                ? _spinner
+                : const Icon(YaruIcons.refresh),
+            label: Text(
+              operation == SchedulerOperation.restart
+                  ? SchedulerOperation.restart.label
+                  : '重启调度器',
+            ),
           )
         else
           Tooltip(
@@ -56,8 +67,14 @@ class QuickActionsRow extends StatelessWidget {
                       successMessage: '已启动调度器',
                     )
                   : null,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('启动调度器'),
+              icon: operation == SchedulerOperation.start
+                  ? _spinner
+                  : const Icon(Icons.play_arrow),
+              label: Text(
+                operation == SchedulerOperation.start
+                    ? SchedulerOperation.start.label
+                    : '启动调度器',
+              ),
             ),
           ),
         if (running)
@@ -69,8 +86,14 @@ class QuickActionsRow extends StatelessWidget {
                     state.stopScheduler,
                     successMessage: '已停止当前调度器',
                   ),
-            icon: const Icon(YaruIcons.stop),
-            label: const Text('停止调度器'),
+            icon: operation == SchedulerOperation.stop
+                ? _spinner
+                : const Icon(YaruIcons.stop),
+            label: Text(
+              operation == SchedulerOperation.stop
+                  ? SchedulerOperation.stop.label
+                  : '停止调度器',
+            ),
           ),
         OutlinedButton.icon(
           onPressed: (!disabled && snapshot.hasDefaultScheduler)
@@ -80,12 +103,24 @@ class QuickActionsRow extends StatelessWidget {
                   successMessage: '已恢复默认调度器',
                 )
               : null,
-          icon: const Icon(YaruIcons.undo),
-          label: const Text('恢复默认调度'),
+          icon: operation == SchedulerOperation.restore
+              ? _spinner
+              : const Icon(YaruIcons.undo),
+          label: Text(
+            operation == SchedulerOperation.restore
+                ? SchedulerOperation.restore.label
+                : '恢复默认调度',
+          ),
         ),
       ],
     );
   }
+
+  static const _spinner = SizedBox(
+    width: 16,
+    height: 16,
+    child: CircularProgressIndicator(strokeWidth: 2),
+  );
 
   /// 启动调度器：优先启动“调度器”页的当前选择，否则恢复默认调度。
   Future<String?> _start(SchedulersController schedulers) async {

@@ -77,10 +77,6 @@ class ScxControlService {
   Future<String?> restartScheduler() =>
       _run(const ['restart'], _dbus.restartScheduler);
 
-  /// 恢复配置文件中设置的默认调度器。
-  Future<String?> restoreDefault() =>
-      _run(const ['restore'], _dbus.restoreDefault);
-
   /// 优先走 root 辅助进程 + scxctl；不可用时回退 D-Bus。
   Future<String?> _run(
     List<String> argv,

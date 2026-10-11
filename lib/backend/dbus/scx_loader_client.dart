@@ -6,7 +6,7 @@ import 'dbus_error_text.dart';
 
 /// `org.scx.Loader` D-Bus 接口的 Dart 客户端。
 ///
-/// 所有控制操作（启动/切换/停止/重启/恢复默认）都通过 scx_loader 守护进程完成，
+/// 所有控制操作（启动/切换/停止/重启）都通过 scx_loader 守护进程完成，
 /// 只读查询（属性、模式参数）不需要授权，控制操作会触发 polkit 授权弹窗。
 class ScxLoaderClient {
   ScxLoaderClient({DBusClient? client})
@@ -158,10 +158,6 @@ class ScxLoaderClient {
   /// 按原配置重启当前调度器。
   Future<void> restartScheduler() =>
       _call('RestartScheduler', const [], replySignature: DBusSignature(''));
-
-  /// 恢复为配置文件中设置的默认调度器。
-  Future<void> restoreDefault() =>
-      _call('RestoreDefault', const [], replySignature: DBusSignature(''));
 
   Future<void> close() => _client.close();
 }

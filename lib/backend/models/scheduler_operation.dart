@@ -3,8 +3,7 @@ enum SchedulerOperation {
   start('启动中'),
   switchTo('切换中'),
   stop('停止中'),
-  restart('重启中'),
-  restore('恢复中');
+  restart('重启中');
 
   const SchedulerOperation(this.label);
 

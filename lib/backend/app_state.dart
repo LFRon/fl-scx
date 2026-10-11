@@ -360,21 +360,6 @@ class ScxAppState extends GetxController {
     settled: (ops) => ops.trim().isNotEmpty,
   );
 
-  /// 恢复配置文件中设置的默认调度器。
-  Future<String?> restoreDefault() {
-    final snapshot = this.snapshot.value;
-    final expected = snapshot.hasDefaultScheduler
-        ? snapshot.defaultScheduler
-        : null;
-    return _runSchedulerOperation(
-      SchedulerOperation.restore,
-      action: _control.restoreDefault,
-      settled: (ops) => expected == null
-          ? ops.trim().isNotEmpty
-          : kernelOpsMatches(ops, expected),
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // 配置 / systemd 命令（管理员会话）
   // ---------------------------------------------------------------------------

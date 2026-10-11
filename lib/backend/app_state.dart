@@ -60,6 +60,9 @@ class ScxAppState extends GetxController {
   /// 单次后端读取的超时时间。
   static const _readTimeout = Duration(seconds: 6);
 
+  /// 启动预加载的整体超时时间。
+  static const _bootstrapTimeout = Duration(seconds: 8);
+
   /// 后台自动刷新周期。
   static const _refreshInterval = Duration(seconds: 5);
 
@@ -96,6 +99,10 @@ class ScxAppState extends GetxController {
 
   bool _refreshing = false;
   bool _pendingRefresh = false;
+  bool _preloaded = false;
+
+  /// 正在进行的模式信息加载（用于去重与等待）。
+  final Map<String, Future<void>> _infoLoads = {};
 
   @override
   void onInit() {
@@ -104,8 +111,6 @@ class ScxAppState extends GetxController {
       helperActive.value = _helper.isActive;
     };
     helperActive.value = _helper.isActive;
-    reload();
-    _refreshTimer = Timer.periodic(_refreshInterval, (_) => reload());
   }
 
   @override
@@ -114,6 +119,28 @@ class ScxAppState extends GetxController {
     unawaited(_helper.stop());
     unawaited(_client.close());
     super.onClose();
+  }
+
+  /// 静默预加载：探测 sched_ext 环境、加载支持列表与全部调度器模式信息。
+  ///
+  /// 由 `main()` 在 `runApp` 之前 await，确保界面显示时数据已就绪；
+  /// 幂等，超时或异常时也会放行（周期刷新继续同步状态）。
+  Future<void> preload() async {
+    if (_preloaded) {
+      return;
+    }
+    _preloaded = true;
+    try {
+      await _bootstrapInner().timeout(_bootstrapTimeout);
+    } catch (_) {
+      // 忽略：由周期刷新兜底。
+    }
+    _refreshTimer ??= Timer.periodic(_refreshInterval, (_) => reload());
+  }
+
+  Future<void> _bootstrapInner() async {
+    await reload();
+    await _warmupSchedulerInfos();
   }
 
   /// 获取调度器详细信息（可能仍在加载）。
@@ -205,6 +232,9 @@ class ScxAppState extends GetxController {
       if (next != snapshot.value) {
         snapshot.value = next;
       }
+      // 若已有支持列表而部分调度器信息尚未缓存（如守护进程后启动），
+      // 在后台预热，避免进入调度器页时才加载。
+      _scheduleWarmupIfNeeded();
     } finally {
       _refreshing = false;
       if (_pendingRefresh) {
@@ -214,22 +244,62 @@ class ScxAppState extends GetxController {
     }
   }
 
-  /// 加载指定调度器的模式信息（带缓存）。
+  /// 预加载所有支持调度器的模式信息。
+  Future<void> _warmupSchedulerInfos() async {
+    final schedulers = snapshot.value.supportedSchedulers;
+    if (schedulers.isEmpty) {
+      return;
+    }
+    await Future.wait(schedulers.map(ensureSchedulerInfo));
+  }
+
+  /// 支持列表存在缺失缓存时触发后台预热（已缓存/加载中会被去重）。
+  void _scheduleWarmupIfNeeded() {
+    final schedulers = snapshot.value.supportedSchedulers;
+    if (schedulers.isEmpty) {
+      return;
+    }
+    final missing = schedulers.any(
+      (name) => schedulerInfos[name] == null && _infoLoads[name] == null,
+    );
+    if (missing) {
+      unawaited(_warmupSchedulerInfos());
+    }
+  }
+
+  /// 加载指定调度器的模式信息（带缓存与在途去重）。
   ///
   /// 请勿在 build 期间调用：该方法在首个 await 之前会更新
   /// [schedulerInfos]。
-  Future<void> ensureSchedulerInfo(String scheduler, {bool force = false}) async {
+  Future<void> ensureSchedulerInfo(
+    String scheduler, {
+    bool force = false,
+  }) async {
     final existing = schedulerInfos[scheduler];
-    if (!force &&
-        existing != null &&
-        !existing.loading &&
-        existing.error == null) {
+    if (!force && existing != null && !existing.loading && existing.error == null) {
       return;
     }
-    if (!force && existing != null && existing.loading) {
+    // 已在加载中：等待同一个在途请求，保证调用方（如启动预加载）
+    // 能等到信息真正就绪。
+    final inflight = _infoLoads[scheduler];
+    if (!force && inflight != null) {
+      await inflight;
       return;
     }
 
+    final load = _loadSchedulerInfo(scheduler);
+    _infoLoads[scheduler] = load;
+    try {
+      await load;
+    } finally {
+      if (identical(_infoLoads[scheduler], load)) {
+        _infoLoads.remove(scheduler);
+      }
+    }
+  }
+
+  Future<void> _loadSchedulerInfo(String scheduler) async {
+    final existing = schedulerInfos[scheduler];
     schedulerInfos[scheduler] = (existing ?? SchedulerInfo(name: scheduler))
         .copyWith(loading: true, clearError: true);
 

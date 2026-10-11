@@ -3,6 +3,7 @@ import 'package:yaru/yaru.dart';
 
 import '../../../backend/models/sched_mode.dart';
 import '../../../backend/models/scx_snapshot.dart';
+import '../../../widgets/button_styles.dart';
 import '../../../widgets/recommendation.dart';
 import '../../../widgets/sched_mode_visuals.dart';
 import '../../../widgets/status_chip.dart';
@@ -46,6 +47,7 @@ class SchedModeSelector extends StatelessWidget {
     return YaruRadioListTile<SchedMode>(
       value: mode,
       groupValue: selected,
+      mouseCursor: kClickableMouseCursor,
       onChanged: configured
           ? (value) {
               if (value != null) {

@@ -3,6 +3,7 @@ import 'package:test/test.dart';
 import 'package:fl_scx/backend/config/loader_config.dart';
 import 'package:fl_scx/backend/models/mode_args.dart';
 import 'package:fl_scx/backend/models/sched_mode.dart';
+import 'package:fl_scx/backend/models/scx_snapshot.dart';
 import 'package:fl_scx/backend/system/scx_control_service.dart';
 
 void main() {
@@ -109,6 +110,47 @@ void main() {
       expect(kernelOpsMatches('', 'scx_lavd'), isFalse);
       expect(kernelOpsMatches('lavdx_1.1.3', 'scx_lavd'), isFalse);
       expect(kernelOpsMatches('lavd_1.1.3', 'scx_lavdx'), isFalse);
+    });
+  });
+
+  group('ScxSnapshot.schedulerRunning', () {
+    ScxSnapshot snapshotWith({
+      bool daemonAvailable = true,
+      String current = 'scx_lavd',
+      String kernelState = 'enabled',
+      String kernelOps = 'lavd_1.1.3_x86_64_unknown_linux_gnu',
+    }) => ScxSnapshot(
+      daemonAvailable: daemonAvailable,
+      currentScheduler: current,
+      currentMode: SchedMode.auto,
+      currentArgs: const ['--abc'],
+      supportedSchedulers: const ['scx_lavd'],
+      defaultScheduler: 'scx_lavd',
+      defaultMode: SchedMode.auto,
+      kernelState: kernelState,
+      kernelOps: kernelOps,
+      service: SystemServiceState.unknown,
+      configPath: '/etc/scx_loader/config.toml',
+    );
+
+    test('内核 ops 匹配时视为运行中', () {
+      expect(snapshotWith().schedulerRunning, isTrue);
+    });
+
+    test('内核 ops 为空时不算运行中（守护进程乐观属性不回滚）', () {
+      expect(snapshotWith(kernelOps: '').schedulerRunning, isFalse);
+    });
+
+    test('内核状态不可读时退回守护进程信息', () {
+      expect(
+        snapshotWith(kernelState: '', kernelOps: '').schedulerRunning,
+        isTrue,
+      );
+    });
+
+    test('守护进程不可用或未运行时为 false', () {
+      expect(snapshotWith(daemonAvailable: false).schedulerRunning, isFalse);
+      expect(snapshotWith(current: 'unknown').schedulerRunning, isFalse);
     });
   });
 

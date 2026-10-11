@@ -398,8 +398,9 @@ class ScxAppState extends GetxController {
   /// 期间保持 [activeOperation] 让界面显示“启动中/停止中/…”并禁用按钮。
   ///
   /// scx_loader 的启停是异步的：D-Bus/scxctl 调用返回只代表命令被接受，
-  /// 必须等待 `/sys/kernel/sched_ext/root/ops` 达到预期状态后再刷新界面，
-  /// 避免旧状态未卸载完成时进行下一步操作导致的瞬时异常。
+  /// 必须等待 `/sys/kernel/sched_ext/root/ops` 达到预期状态后再刷新界面。
+  /// 收敛失败（例如自定义参数不被调度器支持导致进程启动失败）时返回
+  /// 明确错误，而不是静默显示成功。
   Future<String?> _runSchedulerOperation(
     SchedulerOperation operation, {
     required Future<String?> Function() action,
@@ -415,11 +416,12 @@ class ScxAppState extends GetxController {
     try {
       error = await _perform(action);
       if (error == null) {
-        // 等待内核状态收敛，并保证“进行中”反馈至少可见一小段时间。
-        await Future.wait([
-          _awaitKernelSettled(settled),
-          Future<void>.delayed(_minOperationFeedback),
-        ]);
+        // 收敛判定与最短反馈并行执行。
+        final settledFuture = _awaitKernelSettled(settled);
+        await Future<void>.delayed(_minOperationFeedback);
+        if (!await settledFuture) {
+          error = '调度器未能进入预期运行状态，请检查自定义参数是否被该调度器支持';
+        }
       }
     } finally {
       activeOperation.value = null;
@@ -443,17 +445,29 @@ class ScxAppState extends GetxController {
     }
   }
 
-  /// 轮询内核 sched_ext ops，直到达到预期状态或超时。
-  Future<void> _awaitKernelSettled(
+  /// 轮询内核 sched_ext ops，直到**连续两次**（间隔一个轮询周期）
+  /// 观测到预期状态或超时；达到返回 true，超时返回 false。
+  ///
+  /// 连续确认可避免把“旧调度器尚未卸载完成”的瞬时状态误判为成功
+  /// ——例如切换携带无效参数时，旧进程仍短暂存在，随后新进程启动
+  /// 失败、内核 ops 变空。
+  Future<bool> _awaitKernelSettled(
     bool Function(String kernelOps) settled,
   ) async {
     final deadline = DateTime.now().add(_settleTimeout);
+    var confirmedOnce = false;
     while (DateTime.now().isBefore(deadline)) {
       if (settled(await _kernel.runningOps())) {
-        return;
+        if (confirmedOnce) {
+          return true;
+        }
+        confirmedOnce = true;
+      } else {
+        confirmedOnce = false;
       }
       await Future<void>.delayed(_settleInterval);
     }
+    return false;
   }
 
   /// 刷新快照以同步界面；刷新失败不应影响已有结果。

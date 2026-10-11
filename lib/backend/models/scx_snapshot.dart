@@ -1,7 +1,21 @@
-import 'package:flutter/foundation.dart';
-
 import 'mode_args.dart';
 import 'sched_mode.dart';
+
+/// 仅用于模型内部的列表相等判断（避免引入 Flutter 依赖，保持模型纯 Dart）。
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /// scx_loader systemd 服务状态。
 class SystemServiceState {
@@ -79,10 +93,22 @@ class ScxSnapshot {
   final String? errorMessage;
 
   /// 当前是否有调度器在运行。
-  bool get schedulerRunning =>
-      daemonAvailable &&
-      currentScheduler.isNotEmpty &&
-      currentScheduler != 'unknown';
+  ///
+  /// 内核状态可读时以内核 ops 为准：scx_loader 的 D-Bus 属性是乐观值，
+  /// 调度器进程启动失败（例如自定义参数无效）时不会回滚，若只看守护
+  /// 进程信息会出现“内核里没有调度器但界面显示运行中”的不一致。
+  /// 内核状态不可读（无 /sys/kernel/sched_ext）时退回守护进程信息。
+  bool get schedulerRunning {
+    if (!daemonAvailable ||
+        currentScheduler.isEmpty ||
+        currentScheduler == 'unknown') {
+      return false;
+    }
+    if (kernelState.isEmpty) {
+      return true;
+    }
+    return kernelOpsMatches(kernelOps, currentScheduler);
+  }
 
   /// 是否配置了开机默认调度器。
   bool get hasDefaultScheduler =>
@@ -111,8 +137,8 @@ class ScxSnapshot {
       other.daemonAvailable == daemonAvailable &&
       other.currentScheduler == currentScheduler &&
       other.currentMode == currentMode &&
-      listEquals(other.currentArgs, currentArgs) &&
-      listEquals(other.supportedSchedulers, supportedSchedulers) &&
+      _listEquals(other.currentArgs, currentArgs) &&
+      _listEquals(other.supportedSchedulers, supportedSchedulers) &&
       other.defaultScheduler == defaultScheduler &&
       other.defaultMode == defaultMode &&
       other.kernelState == kernelState &&

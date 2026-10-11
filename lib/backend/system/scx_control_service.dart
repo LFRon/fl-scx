@@ -1,16 +1,16 @@
 import 'dart:io';
 
-import '../dbus/dbus_error_text.dart';
 import '../dbus/scx_loader_client.dart';
 import '../models/sched_mode.dart';
 import 'privileged_helper.dart';
 
 /// 调度器控制路由。
 ///
-/// 优先通过已授权的 root 辅助进程调用 `scxctl`：调度器仍由 scx_loader
+/// 通过已授权的 root 辅助进程调用 `scxctl`：调度器仍由 scx_loader
 /// 守护进程控制，但本次运行内首次授权后不再重复弹窗。
-/// 当 scxctl 不可用时，回退到应用自身的 D-Bus 客户端
-/// （会触发 scx_loader 的 polkit 交互授权）。
+///
+/// 每个操作只执行一次、不重试也不回退其它通道：失败直接返回错误
+/// 由界面提示（例如 scxctl 缺失、授权被取消、参数不被调度器支持）。
 class ScxControlService {
   ScxControlService({ScxLoaderClient? dbus, PrivilegedHelper? helper})
     : _dbus = dbus ?? ScxLoaderClient(),
@@ -44,9 +44,6 @@ class ScxControlService {
         mode: mode,
         args: args,
       ),
-      () => args.isEmpty
-          ? _dbus.switchScheduler(scheduler, mode)
-          : _dbus.switchSchedulerWithArgs(scheduler, args),
     );
   }
 
@@ -70,51 +67,29 @@ class ScxControlService {
   }
 
   /// 停止当前调度器。
-  Future<String?> stopScheduler() =>
-      _run(const ['stop'], _dbus.stopScheduler);
+  Future<String?> stopScheduler() => _run(const ['stop']);
 
   /// 按原配置重启当前调度器。
-  Future<String?> restartScheduler() =>
-      _run(const ['restart'], _dbus.restartScheduler);
+  Future<String?> restartScheduler() => _run(const ['restart']);
 
-  /// 优先走 root 辅助进程 + scxctl；不可用时回退 D-Bus。
-  Future<String?> _run(
-    List<String> argv,
-    Future<void> Function() fallback,
-  ) async {
+  /// 经管理员会话调用 scxctl；单次执行，失败直接返回错误。
+  Future<String?> _run(List<String> argv) async {
     final executable = _resolveScxctl();
-    if (executable != null) {
-      final result = await _helper.runScxctl(
-        executable: executable,
-        arguments: argv,
-      );
-      switch (result.status) {
-        case HelperResultStatus.ok:
-          return null;
-        case HelperResultStatus.failed:
-          // 包括用户取消授权与 scxctl 自身的错误，直接展示。
-          return result.message ?? '操作失败';
-        case HelperResultStatus.unavailable:
-          break; // 辅助会话/ scxctl 不可用，尝试 D-Bus 回退
-      }
+    if (executable == null) {
+      return '操作失败：未找到 scxctl（scx-loader 命令行客户端）';
     }
-
-    try {
-      await fallback();
-      return null;
-    } on ScxBackendException catch (error) {
-      return error.message;
-    } catch (error) {
-      return describeDBusError(error);
-    }
+    final result = await _helper.runScxctl(
+      executable: executable,
+      arguments: argv,
+    );
+    return result.isOk ? null : (result.message ?? '操作失败');
   }
 
   /// 当前是否没有调度器在运行（此时应使用 scxctl start 而不是 switch）。
   Future<bool> _isNoSchedulerRunning() async {
     try {
       final current = await _dbus.currentScheduler();
-      return current.isEmpty ||
-          current == ScxLoaderClient.unknownScheduler;
+      return current.isEmpty || current == ScxLoaderClient.unknownScheduler;
     } catch (_) {
       // 读取失败时保守使用 switch（运行中的场景更常见）。
       return false;

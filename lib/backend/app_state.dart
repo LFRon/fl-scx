@@ -6,6 +6,7 @@ import 'config/loader_config.dart';
 import 'dbus/dbus_error_text.dart';
 import 'dbus/scx_loader_client.dart';
 import 'kernel/kernel_sched_ext.dart';
+import 'models/mode_args.dart';
 import 'models/sched_mode.dart';
 import 'models/scheduler_operation.dart';
 import 'models/scx_snapshot.dart';
@@ -270,7 +271,7 @@ class ScxAppState extends GetxController {
       operation,
       action: () =>
           _control.switchScheduler(scheduler: scheduler, mode: mode, args: args),
-      settled: (ops) => _opsMatches(ops, scheduler),
+      settled: (ops) => kernelOpsMatches(ops, scheduler),
     );
   }
 
@@ -300,7 +301,7 @@ class ScxAppState extends GetxController {
       action: _control.restoreDefault,
       settled: (ops) => expected == null
           ? ops.trim().isNotEmpty
-          : _opsMatches(ops, expected),
+          : kernelOpsMatches(ops, expected),
     );
   }
 
@@ -405,11 +406,5 @@ class ScxAppState extends GetxController {
     try {
       await reload();
     } catch (_) {}
-  }
-
-  /// 判断内核 ops 是否为指定调度器。
-  static bool _opsMatches(String kernelOps, String scheduler) {
-    final ops = kernelOps.trim();
-    return ops == scheduler || ops.startsWith('$scheduler ');
   }
 }

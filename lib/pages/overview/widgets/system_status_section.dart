@@ -37,7 +37,9 @@ class SystemStatusSection extends StatelessWidget {
             title: const Text('当前内核调度器（ops）'),
             subtitle: const Text('/sys/kernel/sched_ext/root/ops'),
             trailing: Text(
-              snapshot.kernelOps.isEmpty ? '（无）' : snapshot.kernelOps,
+              shortKernelOpsName(snapshot.kernelOps).isEmpty
+                  ? '（无）'
+                  : shortKernelOpsName(snapshot.kernelOps),
             ),
           ),
           YaruListTile(

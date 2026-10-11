@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../../backend/app_state.dart';
+import '../../../backend/models/mode_args.dart';
 
 /// 关于信息。
 class AboutSection extends GetView<ScxAppState> {
@@ -12,7 +13,8 @@ class AboutSection extends GetView<ScxAppState> {
   Widget build(BuildContext context) {
     return Obx(() {
       final snapshot = controller.snapshot.value;
-      final ops = snapshot.kernelOps.isEmpty ? '无' : snapshot.kernelOps;
+      final ops = shortKernelOpsName(snapshot.kernelOps);
+      final opsText = ops.isEmpty ? '无' : ops;
 
       return YaruSection(
         headline: const Text('关于'),
@@ -40,7 +42,7 @@ class AboutSection extends GetView<ScxAppState> {
               subtitle: Text(
                 snapshot.kernelState.isEmpty
                     ? '未检测到 /sys/kernel/sched_ext'
-                    : '状态：${snapshot.kernelState} · ops：$ops',
+                    : '状态：${snapshot.kernelState} · ops：$opsText',
               ),
             ),
           ],

@@ -81,6 +81,37 @@ void main() {
     });
   });
 
+  group('内核 ops 名称', () {
+    test('shortKernelOpsName 处理版本三元组/完整名/裸名', () {
+      expect(
+        shortKernelOpsName('lavd_1.1.3_x86_64_unknown_linux_gnu'),
+        'lavd',
+      );
+      expect(shortKernelOpsName('scx_lavd'), 'lavd');
+      expect(shortKernelOpsName('lavd'), 'lavd');
+      expect(shortKernelOpsName('lavd-1.1.3'), 'lavd');
+      expect(shortKernelOpsName(''), '');
+    });
+
+    test('kernelOpsMatches 模糊匹配各格式', () {
+      expect(
+        kernelOpsMatches('lavd_1.1.3_x86_64_unknown_linux_gnu', 'scx_lavd'),
+        isTrue,
+      );
+      expect(kernelOpsMatches('scx_lavd', 'scx_lavd'), isTrue);
+      expect(kernelOpsMatches('lavd', 'scx_lavd'), isTrue);
+      expect(kernelOpsMatches('scx-lavd-1.1.3', 'scx_lavd'), isTrue);
+      expect(kernelOpsMatches('lavd1.1.3', 'scx_lavd'), isTrue);
+      expect(
+        kernelOpsMatches('bpfland_1.1.3_x86_64', 'scx_lavd'),
+        isFalse,
+      );
+      expect(kernelOpsMatches('', 'scx_lavd'), isFalse);
+      expect(kernelOpsMatches('lavdx_1.1.3', 'scx_lavd'), isFalse);
+      expect(kernelOpsMatches('lavd_1.1.3', 'scx_lavdx'), isFalse);
+    });
+  });
+
   group('LoaderConfig.applyDefaults', () {
     final config = LoaderConfig();
 

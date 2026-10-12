@@ -3,10 +3,14 @@ import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import 'app/fl_scx_app.dart';
+import 'app/fl_scx_binding.dart';
 import 'backend/app_state.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // 自定义 Binding：在事件进入渲染绑定前过滤 GTK 嵌入器在触摸屏与鼠标
+  // 混用时重复发送的 Add 事件（否则触发 MouseTracker 断言），见
+  // fl_scx_binding.dart；须先于其它任何 Binding 初始化。
+  FlScxBinding();
 
   // 隐藏原生 GTK 标题栏：窗口的最小化/最大化/关闭与拖动改由应用内的
   // YaruWindowTitleBar 承担（窗口控制按钮显示在窗口右上角）。

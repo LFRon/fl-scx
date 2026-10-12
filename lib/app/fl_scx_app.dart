@@ -19,8 +19,9 @@ class FlScxApp extends StatelessWidget {
   /// 构建带打包字体的 Yaru 主题。
   ///
   /// [createYaruLightTheme]/[createYaruDarkTheme] 支持 `fontFamily`，在构建期
-  /// 注入字体后，AppBar/ListTile 等组件主题里 Yaru 预烤的字体副本会一并正确，
-  /// 无需事后逐个修补。颜色配方与 yaru 内置的 `yaruLight`/`yaruDark`/
+  /// 注入字体后，AppBar/ListTile 等组件主题里 Yaru 预烤的字体副本会一并正确；
+  /// 仅 SnackBar 的内容样式是 family-less 常量（工厂注入不到），在下方单独补
+  /// 字体。颜色配方与 yaru 内置的 `yaruLight`/`yaruDark`/
   /// `yaruHighContrastLight`/`yaruHighContrastDark` 保持一致（含橙色变体的
   /// elevatedButtonColor 与高对比主题参数）。
   static ThemeData _yaruTheme({
@@ -73,6 +74,14 @@ class FlScxApp extends StatelessWidget {
       // 少量 Material ListTile 的副标题走 listTileTheme（主题内是 labelMedium 副本）。
       listTileTheme: theme.listTileTheme.copyWith(
         subtitleTextStyle: bump(theme.listTileTheme.subtitleTextStyle),
+      ),
+      // Yaru 的通知（SnackBar）内容样式是 family-less 的 const TextStyle，
+      // 工厂的 fontFamily 注入不到；补上字体，通知中的中文才不会回退到
+      // 系统字体（ARM64 下渲染异常）。
+      snackBarTheme: theme.snackBarTheme.copyWith(
+        contentTextStyle: theme.snackBarTheme.contentTextStyle?.apply(
+          fontFamily: _appFontFamily,
+        ),
       ),
     );
   }

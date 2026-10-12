@@ -17,10 +17,10 @@ class StatusChip extends StatelessWidget {
   final Color? color;
 
   /// “运行中/已启用”等成功状态色：浅色主题沿用 Yaru 原深绿（浅绿在
-  /// 浅色底上太淡），深色主题改用浅绿（原深绿在深色底上偏暗）。
+  /// 浅色底上太淡），深色主题改用 Material 亮绿色（原深绿在深色底上偏暗）。
   static Color successColor(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
-        ? YaruColors.ubuntuMateGreen
+        ? Colors.lightGreen
         : YaruColors.light.success;
   }
 

@@ -17,6 +17,9 @@ class CurrentSchedulerCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = YaruColors.of(context);
     final running = snapshot.schedulerRunning;
+    final hintChipColor = theme.brightness == Brightness.dark
+        ? Colors.lightBlue
+        : theme.colorScheme.primary;
 
     return YaruBorderContainer(
       padding: const EdgeInsets.all(24),
@@ -70,12 +73,13 @@ class CurrentSchedulerCard extends StatelessWidget {
                       StatusChip(
                         icon: snapshot.currentMode.icon,
                         label: '模式：${snapshot.currentMode.label}',
-                        color: theme.colorScheme.primary,
+                        color: hintChipColor,
                       ),
                     if (running && snapshot.currentArgs.isNotEmpty)
                       StatusChip(
                         icon: YaruIcons.terminal,
                         label: snapshot.currentArgs.join(' '),
+                        color: hintChipColor,
                       ),
                     StatusChip(
                       icon: Icons.memory,

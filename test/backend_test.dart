@@ -10,6 +10,7 @@ import 'package:fl_scx/backend/system/distro_info.dart';
 import 'package:fl_scx/backend/system/privileged_helper.dart';
 import 'package:fl_scx/backend/system/scx_control_service.dart';
 import 'package:fl_scx/backend/system/scx_installation.dart';
+import 'package:fl_scx/backend/system/systemd_controller.dart';
 
 void main() {
   group('SchedMode', () {
@@ -487,6 +488,32 @@ Status: install ok installed
         ], ['scxctl', 'scx_loader']),
         isTrue,
       );
+    });
+  });
+
+  group('SystemdController', () {
+    test('parseShowOutput 解析 systemctl show 输出', () {
+      final state = SystemdController.parseShowOutput(
+        'ActiveState=active\nUnitFileState=enabled\n',
+      );
+      expect(state.active, isTrue);
+      expect(state.enabled, isTrue);
+    });
+
+    test('parseShowOutput 未安装/未运行单元时均为 false', () {
+      final state = SystemdController.parseShowOutput(
+        'ActiveState=inactive\nUnitFileState=\n',
+      );
+      expect(state.active, isFalse);
+      expect(state.enabled, isFalse);
+    });
+
+    test('parseShowOutput 忽略空行与其它属性', () {
+      final state = SystemdController.parseShowOutput(
+        '\nLoadState=loaded\nActiveState=failed\nUnitFileState=disabled\n',
+      );
+      expect(state.active, isFalse);
+      expect(state.enabled, isFalse);
     });
   });
 }

@@ -68,8 +68,12 @@ class ScxAppState extends GetxController {
   /// 启动预加载的整体超时时间。
   static const _bootstrapTimeout = Duration(seconds: 8);
 
-  /// 后台自动刷新周期。
-  static const _refreshInterval = Duration(seconds: 5);
+  /// 后台自动刷新周期（轮询）。
+  ///
+  /// [reload] 自带去重合并（进行中的刷新结束后补跑一次），且快照仅在
+  /// 内容变化时更新，2.5s 的节奏不会造成多余刷新；systemd 服务状态
+  /// 读取另有缓存（见 [SystemdController]）。
+  static const _refreshInterval = Duration(milliseconds: 2500);
 
   /// 等待内核调度状态收敛的超时时间与轮询间隔（600ms，避免过于频繁）。
   static const _settleTimeout = Duration(seconds: 10);

@@ -1,3 +1,5 @@
+import 'dart:convert' show jsonDecode;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:get/get.dart';
@@ -10,17 +12,22 @@ import '../../backend/models/mode_args.dart';
 class AboutPage extends GetView<ScxAppState> {
   const AboutPage({super.key});
 
-  /// 应用版本号（读取打包进资源的 pubspec.yaml，只读取一次并缓存）。
+  /// 应用版本号（只读取一次并缓存）。
+  ///
+  /// 版本在编译期由构建工具写入资源包内的 `version.json`（内容来自
+  /// pubspec.yaml 的 version），运行时不依赖 pubspec.yaml 本身。
   static final Future<String> appVersion = _readAppVersion();
 
   static Future<String> _readAppVersion() async {
     try {
-      final text = await rootBundle.loadString('pubspec.yaml');
-      final match = RegExp(
-        r'^version:\s*(\S+)',
-        multiLine: true,
-      ).firstMatch(text);
-      return match?.group(1) ?? '未知';
+      final text = await rootBundle.loadString('version.json');
+      final data = jsonDecode(text) as Map<String, dynamic>;
+      final version = (data['version'] as String?) ?? '';
+      final build = (data['build_number'] as String?) ?? '';
+      if (version.isEmpty) {
+        return '未知';
+      }
+      return build.isEmpty ? version : '$version+$build';
     } catch (_) {
       return '未知';
     }

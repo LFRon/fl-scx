@@ -36,23 +36,27 @@ class FlScxApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return YaruTheme(
-      builder: (context, yaru, child) => GetMaterialApp(
-        title: 'SCX 调度管理器',
-        debugShowCheckedModeBanner: false,
-        theme: _enlargeSmallFonts(yaru.theme),
-        darkTheme: _enlargeSmallFonts(yaru.darkTheme),
-        highContrastTheme: _enlargeSmallFonts(yaruHighContrastLight),
-        highContrastDarkTheme: _enlargeSmallFonts(yaruHighContrastDark),
-        initialBinding: AppBindings(),
-        scrollBehavior: const MaterialScrollBehavior().copyWith(
-          dragDevices: {
-            PointerDeviceKind.mouse,
-            PointerDeviceKind.touch,
-            PointerDeviceKind.trackpad,
-            PointerDeviceKind.stylus,
-          },
+      builder: (context, yaru, child) => YaruTitleBarTheme(
+        // 窗口控制按钮组：收紧按钮之间的间距（Yaru 默认 14）。
+        data: const YaruTitleBarThemeData(buttonSpacing: 10),
+        child: GetMaterialApp(
+          title: 'SCX 调度管理器',
+          debugShowCheckedModeBanner: false,
+          theme: _enlargeSmallFonts(yaru.theme),
+          darkTheme: _enlargeSmallFonts(yaru.darkTheme),
+          highContrastTheme: _enlargeSmallFonts(yaruHighContrastLight),
+          highContrastDarkTheme: _enlargeSmallFonts(yaruHighContrastDark),
+          initialBinding: AppBindings(),
+          scrollBehavior: const MaterialScrollBehavior().copyWith(
+            dragDevices: {
+              PointerDeviceKind.mouse,
+              PointerDeviceKind.touch,
+              PointerDeviceKind.trackpad,
+              PointerDeviceKind.stylus,
+            },
+          ),
+          home: const StartupWarmup(child: HomePage()),
         ),
-        home: const StartupWarmup(child: HomePage()),
       ),
     );
   }

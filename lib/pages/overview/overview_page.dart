@@ -3,11 +3,15 @@ import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../backend/app_state.dart';
+import '../install/scx_install_view.dart';
 import 'widgets/current_scheduler_card.dart';
 import 'widgets/quick_actions_row.dart';
 import 'widgets/system_status_section.dart';
 
 /// 概览页：展示当前调度器状态与快捷操作。
+///
+/// scx 未安装时（统一的 [ScxAppState.scxInstalled] 开关为 false），
+/// 直接显示安装引导页面。
 class OverviewPage extends GetView<ScxAppState> {
   const OverviewPage({super.key});
 
@@ -16,6 +20,9 @@ class OverviewPage extends GetView<ScxAppState> {
     return YaruDetailPage(
       appBar: AppBar(title: const Text('概览')),
       body: Obx(() {
+        if (!controller.scxInstalled.value) {
+          return const ScxInstallView();
+        }
         final snapshot = controller.snapshot.value;
         return ListView(
           padding: const EdgeInsets.all(24),

@@ -12,6 +12,9 @@ import 'home_controller.dart';
 import 'home_master_tile.dart';
 
 /// 应用外壳：在 Yaru 主从布局中展示各功能页面。
+///
+/// scx 未安装时（统一的 [ScxAppState.scxInstalled] 开关为 false），
+/// 侧边栏只保留“概览”，隐藏“调度器”与“设置”条目。
 class HomePage extends GetView<ScxAppState> {
   const HomePage({super.key});
 
@@ -19,48 +22,59 @@ class HomePage extends GetView<ScxAppState> {
   Widget build(BuildContext context) {
     final home = Get.find<HomeController>();
 
-    return YaruMasterDetailPage(
-      controller: home.pages,
-      appBar: AppBar(
-        title: DefaultTextStyle.merge(
-          // 顶栏标题字号在此调整（继承主题颜色与字重）。
-          style: const TextStyle(fontSize: 17),
-          child: const Text('SCX 调度管理器'),
-        ),
-        actions: [
-          Obx(
-            () => controller.busy.value
-                ? const Padding(
-                    padding: EdgeInsets.only(right: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+    return Obx(() {
+      final scxInstalled = controller.scxInstalled.value;
+
+      return YaruMasterDetailPage(
+        controller: home.pages,
+        appBar: AppBar(
+          title: DefaultTextStyle.merge(
+            // 顶栏标题字号在此调整（继承主题颜色与字重）。
+            style: const TextStyle(fontSize: 17),
+            child: const Text('SCX 调度管理器'),
+          ),
+          actions: [
+            Obx(
+              () => controller.busy.value
+                  ? const Padding(
+                      padding: EdgeInsets.only(right: 16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          IconButton(
-            onPressed: controller.reload,
-            mouseCursor: SystemMouseCursors.click,
-            icon: const Icon(YaruIcons.refresh),
-            tooltip: '刷新',
-          ),
-        ],
-      ),
-      bottomBar: const HomeBottomBar(),
-      // 主列表点选后同步底部“关于”条目高亮状态。
-      onSelected: home.syncSelection,
-      tileBuilder: (context, index, selected, availableWidth) =>
-          buildHomeMasterTile(context, index, selected),
-      pageBuilder: (context, index) => switch (index) {
-        0 => const OverviewPage(),
-        1 => const SchedulersPage(),
-        2 => const SettingsPage(),
-        _ => const AboutPage(),
-      },
-    );
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            IconButton(
+              onPressed: controller.reload,
+              mouseCursor: SystemMouseCursors.click,
+              icon: const Icon(YaruIcons.refresh),
+              tooltip: '刷新',
+            ),
+          ],
+        ),
+        bottomBar: const HomeBottomBar(),
+        // 主列表点选后同步底部“关于”条目高亮状态。
+        onSelected: home.syncSelection,
+        tileBuilder: (context, index, selected, availableWidth) =>
+            buildHomeMasterTile(
+              context,
+              index,
+              selected,
+              scxInstalled: scxInstalled,
+            ),
+        pageBuilder: (context, index) => switch (index) {
+          0 => const OverviewPage(),
+          1 when scxInstalled => const SchedulersPage(),
+          2 when scxInstalled => const SettingsPage(),
+          3 => const AboutPage(),
+          // 未安装时隐藏条目的索引不可达，兜底回到概览（安装引导页）。
+          _ => const OverviewPage(),
+        },
+      );
+    });
   }
 }

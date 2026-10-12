@@ -1,10 +1,15 @@
 import 'package:test/test.dart';
 
+import 'dart:io';
+
 import 'package:fl_scx/backend/config/loader_config.dart';
 import 'package:fl_scx/backend/models/mode_args.dart';
 import 'package:fl_scx/backend/models/sched_mode.dart';
 import 'package:fl_scx/backend/models/scx_snapshot.dart';
+import 'package:fl_scx/backend/system/distro_info.dart';
+import 'package:fl_scx/backend/system/privileged_helper.dart';
 import 'package:fl_scx/backend/system/scx_control_service.dart';
+import 'package:fl_scx/backend/system/scx_installation.dart';
 
 void main() {
   group('SchedMode', () {
@@ -314,6 +319,174 @@ auto_mode = ["--autopilot"]
         args: ['a"b', r'c\d'],
       );
       expect(text, contains(r'auto_mode = ["a\"b", "c\\d"]'));
+    });
+  });
+
+  group('DistroInfo', () {
+    test('parseOsReleaseId 解析并去除引号', () {
+      expect(DistroInfo.parseOsReleaseId('ID=deepin\nNAME=Deepin\n'), 'deepin');
+      expect(DistroInfo.parseOsReleaseId('ID="deepin"\n'), 'deepin');
+      expect(DistroInfo.parseOsReleaseId("ID='deepin'\n"), 'deepin');
+      expect(DistroInfo.parseOsReleaseId('NAME=Deepin\n'), isNull);
+    });
+
+    test('containsBetterDeepinRepo 匹配两个已知源', () {
+      expect(
+        DistroInfo.containsBetterDeepinRepo(
+          'deb [trusted=yes] '
+          'https://obsci.odata.cc/Better-Deepin-REPO/Deepin_25/ ./',
+        ),
+        isTrue,
+      );
+      expect(
+        DistroInfo.containsBetterDeepinRepo(
+          'deb https://repo.odata.cc/deepin25/ Deepin_25 main',
+        ),
+        isTrue,
+      );
+      expect(
+        DistroInfo.containsBetterDeepinRepo(
+          'deb https://deb.debian.org/debian bookworm main',
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('ScxInstallationService', () {
+    test('rustcSatisfies 版本比较以 1.95 为界', () {
+      expect(
+        ScxInstallationService.rustcSatisfies(
+          'rustc 1.95.0 (59807616e 2026-06-01)',
+        ),
+        isTrue,
+      );
+      expect(ScxInstallationService.rustcSatisfies('rustc 1.96.0-nightly'), isTrue);
+      expect(ScxInstallationService.rustcSatisfies('rustc 2.0.0'), isTrue);
+      expect(
+        ScxInstallationService.rustcSatisfies(
+          'rustc 1.94.1 (e408947bf 2026-01-01)',
+        ),
+        isFalse,
+      );
+      expect(ScxInstallationService.rustcSatisfies('未找到'), isFalse);
+    });
+
+    test('isInstalled 需要 scx-loader 与至少一个调度器', () async {
+      final dir = await Directory.systemTemp.createTemp('fl_scx_install_test');
+      addTearDown(() => dir.delete(recursive: true));
+      final bin = Directory('${dir.path}/bin')..createSync();
+      final dirs = [bin.path];
+
+      // 什么都没有：未安装。
+      expect(
+        ScxInstallationService.isInstalled(daemonAvailable: false, dirs: dirs),
+        isFalse,
+      );
+      // 只有 scxctl：仍视为未安装（缺少调度器）。
+      File('${bin.path}/scxctl').writeAsStringSync('');
+      expect(
+        ScxInstallationService.isInstalled(daemonAvailable: false, dirs: dirs),
+        isFalse,
+      );
+      // 有调度器二进制但 D-Bus 不可用：已安装（文件存在）。
+      File('${bin.path}/scx_lavd').writeAsStringSync('');
+      expect(
+        ScxInstallationService.isInstalled(daemonAvailable: false, dirs: dirs),
+        isTrue,
+      );
+      // D-Bus 可用时即使目录为空也视为已安装 loader 侧（需有调度器）。
+      final empty = Directory('${dir.path}/empty')..createSync();
+      expect(
+        ScxInstallationService.isInstalled(
+          daemonAvailable: true,
+          dirs: [empty.path],
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('ProtocolLineSplitter', () {
+    test('仅按 \\n 断行：dpkg 的 \\r 进度不会被拆成多行', () async {
+      final lines = await Stream.fromIterable([
+        'LOG (正在读取数据库 ... 5%\r',
+        '(正在读取数据库 ... 10%\r\n',
+        'OK\n',
+      ]).transform(const ProtocolLineSplitter()).toList();
+      expect(lines, [
+        'LOG (正在读取数据库 ... 5%\r(正在读取数据库 ... 10%',
+        'OK',
+      ]);
+    });
+
+    test('跨块拼行、CRLF 去除与末尾残留输出', () async {
+      final lines = await Stream.fromIterable([
+        'READY\nLO',
+        'G hi\r\nOK',
+      ]).transform(const ProtocolLineSplitter()).toList();
+      expect(lines, ['READY', 'LOG hi', 'OK']);
+
+      final tail = await Stream.fromIterable([
+        'LOG tail',
+      ]).transform(const ProtocolLineSplitter()).toList();
+      expect(tail, ['LOG tail']);
+    });
+  });
+
+  group('ScxInstallationService 安装核验', () {
+    test('dpkgPackageInstalled 解析安装状态', () {
+      const status = '''
+Package: scx-scheds
+Status: install ok installed
+Version: 1.1.3-2
+
+Package: scx-loader
+Status: deinstall ok config-files
+Version: 1.1.3-1
+
+Package: other
+Status: install ok installed
+''';
+      expect(
+        ScxInstallationService.dpkgPackageInstalled(status, 'scx-scheds'),
+        isTrue,
+      );
+      expect(
+        ScxInstallationService.dpkgPackageInstalled(status, 'scx-loader'),
+        isFalse,
+      );
+      expect(
+        ScxInstallationService.dpkgPackageInstalled(status, 'other'),
+        isTrue,
+      );
+      expect(
+        ScxInstallationService.dpkgPackageInstalled(status, 'missing'),
+        isFalse,
+      );
+    });
+
+    test('allBinariesPresent 要求全部存在', () async {
+      final dir = await Directory.systemTemp.createTemp('fl_scx_bin_test');
+      addTearDown(() => dir.delete(recursive: true));
+      File('${dir.path}/scxctl').writeAsStringSync('');
+      expect(
+        ScxInstallationService.allBinariesPresent([dir.path], ['scxctl']),
+        isTrue,
+      );
+      expect(
+        ScxInstallationService.allBinariesPresent([
+          dir.path,
+        ], ['scxctl', 'scx_loader']),
+        isFalse,
+      );
+      File('${dir.path}/scx_loader').writeAsStringSync('');
+      expect(
+        ScxInstallationService.allBinariesPresent([
+          dir.path,
+        ], ['scxctl', 'scx_loader']),
+        isTrue,
+      );
     });
   });
 }

@@ -13,6 +13,7 @@ import 'models/scx_snapshot.dart';
 import 'system/privileged_file_writer.dart';
 import 'system/privileged_helper.dart';
 import 'system/scx_control_service.dart';
+import 'system/scx_installation.dart';
 import 'system/systemd_controller.dart';
 
 /// 后端聚合状态：负责采集 scx / scx_loader / 内核 / systemd 信息，
@@ -33,6 +34,7 @@ class ScxAppState extends GetxController {
     SystemdController? systemd,
     LoaderConfig? config,
     ScxControlService? control,
+    ScxInstallationService? installation,
   }) {
     final loader = client ?? ScxLoaderClient();
     final privileged = helper ?? PrivilegedHelper();
@@ -45,6 +47,8 @@ class ScxAppState extends GetxController {
           config ??
           LoaderConfig(writer: PrivilegedFileWriter(helper: privileged)),
       control: control ?? ScxControlService(dbus: loader, helper: privileged),
+      installation:
+          installation ?? ScxInstallationService(helper: privileged),
     );
   }
 
@@ -55,6 +59,7 @@ class ScxAppState extends GetxController {
     required this._systemd,
     required this._config,
     required this._control,
+    required this._installation,
   });
 
   /// 单次后端读取的超时时间。
@@ -80,10 +85,17 @@ class ScxAppState extends GetxController {
   final SystemdController _systemd;
   final LoaderConfig _config;
   final ScxControlService _control;
+  final ScxInstallationService _installation;
   Timer? _refreshTimer;
 
   /// 最近一次刷新得到的系统快照。
   final snapshot = ScxSnapshot.empty.obs;
+
+  /// 统一的 scx 安装状态开关：false 时首页显示“未安装 scx”页面。
+  ///
+  /// 由 [reload] 统一探测维护（scx-loader 可用且存在调度器二进制），
+  /// 界面各处只读取该开关，不再各自判断安装状态。
+  final scxInstalled = true.obs;
 
   /// 是否有后端操作正在执行。
   final busy = false.obs;
@@ -232,6 +244,10 @@ class ScxAppState extends GetxController {
       if (next != snapshot.value) {
         snapshot.value = next;
       }
+      // 统一的安装状态开关：scx-loader 可用且存在调度器二进制。
+      scxInstalled.value = ScxInstallationService.isInstalled(
+        daemonAvailable: daemonAvailable,
+      );
       // 若已有支持列表而部分调度器信息尚未缓存（如守护进程后启动），
       // 在后台预热，避免进入调度器页时才加载。
       _scheduleWarmupIfNeeded();
@@ -363,6 +379,21 @@ class ScxAppState extends GetxController {
   // ---------------------------------------------------------------------------
   // 配置 / systemd 命令（管理员会话）
   // ---------------------------------------------------------------------------
+
+  /// 安装 scx 与 scx-loader（软件源或 cargo 编译），经管理员会话执行。
+  ///
+  /// 安装各阶段文本通过 [onProgress] 回调、命令输出通过 [onLog]
+  /// 逐行回调（供安装日志对话框展示）；完成后统一刷新快照，
+  /// [scxInstalled] 随之更新。返回 null 表示成功。
+  Future<String?> installScx(
+    ScxInstallMethod method, {
+    void Function(String)? onProgress,
+    void Function(String)? onLog,
+  }) => _execute(
+    () => method == ScxInstallMethod.apt
+        ? _installation.installViaApt(onProgress: onProgress, onLog: onLog)
+        : _installation.installViaCargo(onProgress: onProgress, onLog: onLog),
+  );
 
   /// 将 [scheduler] + [mode] 写入 scx_loader 配置文件作为开机默认；
   /// [args] 非空时一并写入所选模式的参数数组，使开机同样携带生效。

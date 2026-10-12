@@ -25,6 +25,35 @@ class HelperResult {
   static const ok = HelperResult(HelperResultStatus.ok);
 }
 
+/// 仅按 `\n` 断行的协议流转换器（去掉行尾 `\r`）。
+///
+/// 不能用 Dart 的 [LineSplitter]：它额外按 `\r` 断行，而 dpkg 的进度
+/// 输出（`(正在读取数据库 … 5%\r…`）会被拆成多段，不带 `LOG ` 前缀的
+/// 碎片会被误判为命令响应，导致安装中途报“未知响应”而误判失败。
+class ProtocolLineSplitter extends StreamTransformerBase<String, String> {
+  const ProtocolLineSplitter();
+
+  @override
+  Stream<String> bind(Stream<String> stream) async* {
+    var buffer = '';
+    await for (final chunk in stream) {
+      buffer += chunk;
+      var index = buffer.indexOf('\n');
+      while (index != -1) {
+        yield _stripCr(buffer.substring(0, index));
+        buffer = buffer.substring(index + 1);
+        index = buffer.indexOf('\n');
+      }
+    }
+    if (buffer.isNotEmpty) {
+      yield _stripCr(buffer);
+    }
+  }
+
+  static String _stripCr(String line) =>
+      line.endsWith('\r') ? line.substring(0, line.length - 1) : line;
+}
+
 /// 特权辅助进程启动失败。
 class HelperStartException implements Exception {
   HelperStartException(this.message, {this.unavailable = false});
@@ -41,18 +70,26 @@ class HelperStartException implements Exception {
 /// 常驻 root 辅助进程（经 pkexec 一次性授权）。
 ///
 /// 设计目标：应用本次运行内第一次特权操作用户只授权一次，
-/// 之后所有特权命令（写配置、systemctl、scxctl 调度切换）都通过
-/// 该进程执行，不再弹窗；应用退出（stdin 关闭）后进程自动结束，
-/// 下次打开应用重新授权。
+/// 之后所有特权命令（写配置、systemctl、scxctl 调度切换、apt 与
+/// cargo 安装）都通过该进程执行，不再弹窗；应用退出（stdin 关闭）
+/// 后进程自动结束，下次打开应用重新授权。
 ///
 /// 协议：每次请求发送一行，辅助进程回复一行。
 ///
 /// - `PING`：回复 `OK`
-/// - `SYSTEMCTL enable|disable scx_loader`：回复 `OK` / `ERR <message>`
+/// - `SYSTEMCTL daemon-reload|enable|disable scx_loader`：回复
+///   `OK` / `ERR <message>`
 /// - `WRITE <path> <base64>`：回复 `OK` / `ERR <message>`
 /// - `SCXCTL <scxctl路径base64> <参数base64...>`：回复 `OK` /
 ///   `ERR <message>` / `UNAVAILABLE <message>`
+/// - `APT update` / `APT install <包名...>`：回复 `OK` / `ERR <message>`
+/// - `RUSTC_VERSION`：回复 `OK <rustc --version 输出>` / `ERR <message>`
+/// - `RUSTUP_INSTALL`：经国内镜像（rsproxy.cn）安装 Rust 工具链
+/// - `CARGO_INSTALL_LOADER` / `CARGO_INSTALL_LAVD`：crates.io 编译安装
 /// - `QUIT`：回复 `OK` 并退出
+///
+/// 安装类命令执行期间，命令输出会逐行以 `LOG <文本>` 发送，直到最终
+/// `OK` / `ERR <message>`；调用方通过 `onLog` 接收（用于安装日志对话框）。
 class PrivilegedHelper {
   Process? _process;
   IOSink? _stdin;
@@ -72,46 +109,83 @@ class PrivilegedHelper {
 
   /// 设置/取消 scx_loader 服务开机自启。
   Future<HelperResult> setServiceEnabled({required bool enabled}) =>
-      _enqueue(() async {
-        try {
-          await _ensureActive();
-        } on HelperStartException catch (error) {
-          return _startFailure(error);
-        }
-        return _parse(
-          await _request('SYSTEMCTL ${enabled ? 'enable' : 'disable'} scx_loader'),
-        );
-      });
+      _run('SYSTEMCTL ${enabled ? 'enable' : 'disable'} scx_loader');
 
-  /// 以 root 写入 scx_loader 配置文件。
+  /// 刷新 systemd 单元缓存（写入新的 unit 文件后）。
+  Future<HelperResult> daemonReload() => _run('SYSTEMCTL daemon-reload');
+
+  /// 以 root 写入 scx_loader 配置或系统集成文件（白名单路径）。
   Future<HelperResult> writeConfigFile({
     required String path,
     required String content,
-  }) => _enqueue(() async {
-    try {
-      await _ensureActive();
-    } on HelperStartException catch (error) {
-      return _startFailure(error);
-    }
+  }) {
     final data = base64.encode(utf8.encode(content));
-    return _parse(await _request('WRITE $path $data'));
-  });
+    return _run('WRITE $path $data');
+  }
 
   /// 以 root 调用 scxctl（仍通过 scx_loader 守护进程控制调度器）。
   Future<HelperResult> runScxctl({
     required String executable,
     required List<String> arguments,
+  }) {
+    final encoded = [
+      base64.encode(utf8.encode(executable)),
+      for (final argument in arguments) base64.encode(utf8.encode(argument)),
+    ].join(' ');
+    return _run('SCXCTL $encoded');
+  }
+
+  /// 以 root 更新 apt 软件源；命令输出通过 [onLog] 逐行回传。
+  Future<HelperResult> aptUpdate({void Function(String)? onLog}) =>
+      _run('APT update', timeout: _aptTimeout, onLog: onLog);
+
+  /// 以 root 安装白名单内的软件包（scx-scheds / scx-loader）；
+  /// 命令输出通过 [onLog] 逐行回传。
+  Future<HelperResult> aptInstall({
+    required List<String> packages,
+    void Function(String)? onLog,
+  }) => _run(
+    'APT install ${packages.join(' ')}',
+    timeout: _aptTimeout,
+    onLog: onLog,
+  );
+
+  /// 以 root 读取 rustc 版本（用于判断是否需要安装 Rust 工具链）。
+  Future<HelperResult> rustcVersion() => _run('RUSTC_VERSION');
+
+  /// 以 root 通过国内镜像（rsproxy.cn）安装/更新 Rust 工具链；
+  /// 命令输出通过 [onLog] 逐行回传。
+  Future<HelperResult> installRustToolchain({void Function(String)? onLog}) =>
+      _run('RUSTUP_INSTALL', timeout: _installTimeout, onLog: onLog);
+
+  /// 以 root 编译安装 scx_loader 与 scxctl 到 /usr/bin（crates.io）；
+  /// 命令输出通过 [onLog] 逐行回传。
+  Future<HelperResult> cargoInstallScxLoader({void Function(String)? onLog}) =>
+      _run('CARGO_INSTALL_LOADER', timeout: _installTimeout, onLog: onLog);
+
+  /// 以 root 编译安装 scx_lavd 调度器到 /usr/bin（crates.io）；
+  /// 命令输出通过 [onLog] 逐行回传。
+  Future<HelperResult> cargoInstallScxLavd({void Function(String)? onLog}) =>
+      _run('CARGO_INSTALL_LAVD', timeout: _installTimeout, onLog: onLog);
+
+  /// 编译安装类命令的等待上限（单次执行、不重试）。
+  static const _installTimeout = Duration(minutes: 60);
+
+  /// apt 类命令的等待上限。
+  static const _aptTimeout = Duration(minutes: 30);
+
+  /// 串行执行一条受限命令（必要时先激活管理员会话）。
+  Future<HelperResult> _run(
+    String command, {
+    Duration timeout = const Duration(seconds: 30),
+    void Function(String)? onLog,
   }) => _enqueue(() async {
     try {
       await _ensureActive();
     } on HelperStartException catch (error) {
       return _startFailure(error);
     }
-    final encoded = [
-      base64.encode(utf8.encode(executable)),
-      for (final argument in arguments) base64.encode(utf8.encode(argument)),
-    ].join(' ');
-    return _parse(await _request('SCXCTL $encoded'));
+    return _parse(await _request(command, timeout: timeout, onLog: onLog));
   });
 
   /// 结束管理员会话（应用退出时调用）。
@@ -155,50 +229,60 @@ class PrivilegedHelper {
 
     final scriptDir = await Directory.systemTemp.createTemp('fl_scx_helper_');
     _scriptDir = scriptDir;
-    final script = File('${scriptDir.path}/helper.sh');
-    await script.writeAsString(_scriptSource, flush: true);
-
-    Process process;
+    Process? process;
     try {
-      process = await Process.start('pkexec', [bash, script.path]);
-    } on ProcessException catch (error) {
-      throw HelperStartException(
-        '无法执行 pkexec：${error.message}',
-        unavailable: true,
+      final script = File('${scriptDir.path}/helper.sh');
+      await script.writeAsString(_scriptSource, flush: true);
+
+      final Process started;
+      try {
+        started = await Process.start('pkexec', [bash, script.path]);
+      } on ProcessException catch (error) {
+        throw HelperStartException(
+          '无法执行 pkexec：${error.message}',
+          unavailable: true,
+        );
+      }
+      process = started;
+
+      final stderrBuffer = StringBuffer();
+      started.stderr
+          .transform(utf8.decoder)
+          .listen((chunk) {
+            if (stderrBuffer.length < 2000) {
+              stderrBuffer.write(chunk);
+            }
+          })
+          .onError((_) {});
+
+      final lines = StreamIterator(
+        started.stdout
+            .transform(utf8.decoder)
+            .transform(const ProtocolLineSplitter()),
       );
+
+      bool ready;
+      try {
+        ready = await lines.moveNext().timeout(const Duration(seconds: 120));
+      } on TimeoutException {
+        throw HelperStartException('管理员会话启动超时');
+      }
+
+      if (!ready || lines.current != 'READY') {
+        throw await _describeStartFailure(started, stderrBuffer);
+      }
+
+      _process = started;
+      _stdin = started.stdin;
+      _lines = lines;
+      unawaited(started.exitCode.then((_) => _handleExit(started)));
+      onActiveChanged?.call();
+    } catch (_) {
+      // 启动失败：结束进程并清理临时脚本目录，下次操作重新授权。
+      process?.kill();
+      _clearScriptDir();
+      rethrow;
     }
-
-    final stderrBuffer = StringBuffer();
-    process.stderr
-        .transform(utf8.decoder)
-        .listen((chunk) {
-          if (stderrBuffer.length < 2000) {
-            stderrBuffer.write(chunk);
-          }
-        })
-        .onError((_) {});
-
-    final lines = StreamIterator(
-      process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
-    );
-
-    bool ready;
-    try {
-      ready = await lines.moveNext().timeout(const Duration(seconds: 120));
-    } on TimeoutException {
-      process.kill();
-      throw HelperStartException('管理员会话启动超时');
-    }
-
-    if (!ready || lines.current != 'READY') {
-      throw await _describeStartFailure(process, stderrBuffer);
-    }
-
-    _process = process;
-    _stdin = process.stdin;
-    _lines = lines;
-    unawaited(process.exitCode.then((_) => _handleExit(process)));
-    onActiveChanged?.call();
   }
 
   /// 将 pkexec 的退出码转换为用户可读的启动失败异常。
@@ -233,7 +317,11 @@ class PrivilegedHelper {
     }
   }
 
-  Future<String> _request(String command) async {
+  Future<String> _request(
+    String command, {
+    Duration timeout = const Duration(seconds: 30),
+    void Function(String)? onLog,
+  }) async {
     final stdin = _stdin;
     final lines = _lines;
     if (stdin == null || lines == null) {
@@ -242,11 +330,23 @@ class PrivilegedHelper {
     try {
       stdin.writeln(command);
       await stdin.flush();
-      if (!await lines.moveNext().timeout(const Duration(seconds: 30))) {
-        _reset();
-        throw HelperStartException('管理员会话已结束，下次操作将重新授权');
+      while (true) {
+        if (!await lines.moveNext().timeout(timeout)) {
+          _reset();
+          throw HelperStartException('管理员会话已结束，下次操作将重新授权');
+        }
+        final line = lines.current;
+        // 空行不可能是协议响应（响应统一为 OK/ERR/UNAVAILABLE），忽略。
+        if (line.isEmpty) {
+          continue;
+        }
+        // 安装类命令的输出行：转发给调用方（对话框实时展示），继续等待终态。
+        if (line.startsWith(_logPrefix)) {
+          onLog?.call(line.substring(_logPrefix.length));
+          continue;
+        }
+        return line;
       }
-      return lines.current;
     } on TimeoutException {
       _process?.kill();
       _reset();
@@ -257,9 +357,16 @@ class PrivilegedHelper {
     }
   }
 
+  /// 命令输出行前缀（`LOG `）。
+  static const _logPrefix = 'LOG ';
+
   HelperResult _parse(String response) {
     if (response == 'OK') {
       return HelperResult.ok;
+    }
+    if (response.startsWith('OK ')) {
+      // 带数据的成功响应（如 `OK rustc 1.95.0 (…)`）。
+      return HelperResult(HelperResultStatus.ok, response.substring(3));
     }
     if (response.startsWith('ERR ')) {
       return HelperResult(HelperResultStatus.failed, response.substring(4));
@@ -288,14 +395,17 @@ class PrivilegedHelper {
     _process = null;
     _stdin = null;
     _lines = null;
+    _clearScriptDir();
+    onActiveChanged?.call();
+  }
+
+  /// 删除临时脚本目录（会话结束或启动失败时）。
+  void _clearScriptDir() {
     final dir = _scriptDir;
     _scriptDir = null;
     if (dir != null) {
-      unawaited(
-        dir.delete(recursive: true).catchError((_) => dir),
-      );
+      unawaited(dir.delete(recursive: true).catchError((_) => dir));
     }
-    onActiveChanged?.call();
   }
 
   String? _findBash() {
@@ -311,15 +421,39 @@ class PrivilegedHelper {
   static const _scriptSource = r'''
 #!/usr/bin/bash
 # fl_scx 特权辅助进程：由 pkexec 以 root 身份运行，经标准输入接收受限命令。
-# 白名单：systemctl enable/disable scx_loader、scx_loader 配置文件写入、scxctl 调用。
+# 白名单：systemctl（daemon-reload 与 scx_loader 的 enable/disable）、
+# scx_loader 配置与系统集成文件写入、scxctl 调用、apt 源码安装、
+# Rust 工具链与 scx / scx-loader 的 cargo 编译安装（crates.io）。
+set -o pipefail
 B64=/usr/bin/base64
 SYSTEMCTL=/usr/bin/systemctl
+APT_GET=/usr/bin/apt-get
+CARGO_HOME_DIR="${HOME:-/root}/.cargo"
+
+export DEBIAN_FRONTEND=noninteractive
+export PATH="$CARGO_HOME_DIR/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 emit_ok() { printf 'OK\n'; }
 emit_err() {
   local msg="$*"
   msg=${msg//$'\n'/ }
   printf 'ERR %s\n' "$msg"
+}
+# 输出命令日志尾部（单行、限长），用于失败提示。
+log_tail() { tail -n 3 "$1" 2>/dev/null | tr '\n' ' ' | cut -c1-400; }
+
+# 执行命令并把输出逐行以 `LOG <行>` 转发给调用方（安装日志对话框），
+# 同时留存输出用于失败摘要；返回命令自身的退出码。
+# 注意：stdin 必须指向 /dev/null（防止子进程读取协议管道）；
+# sed 需去掉全部 \r（dpkg 的进度输出以 \r 刷新，残留会让应用侧误断行）。
+run_streamed() {
+  local logf
+  logf=$(mktemp)
+  "$@" </dev/null 2>&1 | tee "$logf" | sed -u -e 's/\r//g' -e 's/^/LOG /'
+  local code=${PIPESTATUS[0]}
+  LOG_TAIL=$(log_tail "$logf")
+  rm -f "$logf"
+  return "$code"
 }
 
 printf 'READY\n'
@@ -334,13 +468,25 @@ while IFS= read -r line; do
     SYSTEMCTL)
       action=${rest%% *}
       unit=${rest#* }
-      case "$action:$unit" in
-        enable:scx_loader|disable:scx_loader)
-          if "$SYSTEMCTL" "$action" "$unit" >/dev/null 2>&1; then
+      case "$action" in
+        daemon-reload)
+          if "$SYSTEMCTL" daemon-reload >/dev/null 2>&1; then
             emit_ok
           else
-            emit_err "systemctl $action $unit 失败"
+            emit_err 'systemctl daemon-reload 失败'
           fi
+          ;;
+        enable|disable)
+          case "$unit" in
+            scx_loader)
+              if "$SYSTEMCTL" "$action" "$unit" >/dev/null 2>&1; then
+                emit_ok
+              else
+                emit_err "systemctl $action $unit 失败"
+              fi
+              ;;
+            *) emit_err 'systemctl 参数不允许' ;;
+          esac
           ;;
         *) emit_err 'systemctl 参数不允许' ;;
       esac
@@ -350,8 +496,14 @@ while IFS= read -r line; do
       data=${rest#* }
       case "$path" in
         /etc/scx_loader/config.toml|/etc/scx_loader.toml|/usr/share/scx_loader/config.toml|/usr/share/scx_loader.toml) ;;
+        /usr/lib/systemd/system/scx_loader.service|/usr/share/dbus-1/system-services/org.scx.Loader.service|/usr/share/dbus-1/system.d/org.scx.Loader.conf|/usr/share/dbus-1/interfaces/org.scx.Loader.xml|/usr/share/polkit-1/actions/org.scx.Loader.policy) ;;
         *) emit_err '写入路径不允许'; continue ;;
       esac
+      # 必须先建好父目录：否则下面的重定向会失败（曾误报为“配置数据解码失败”）。
+      if ! mkdir -p "$(dirname "$path")"; then
+        emit_err '创建目标目录失败'
+        continue
+      fi
       tmp="${path}.fl_scx.tmp"
       if printf '%s' "$data" | "$B64" -d > "$tmp" 2>/dev/null; then
         if mv -f "$tmp" "$path"; then
@@ -388,6 +540,75 @@ while IFS= read -r line; do
       else
         if [ -z "$output" ]; then output="scxctl 退出码 $code"; fi
         emit_err "$output"
+      fi
+      ;;
+    APT)
+      action=${rest%% *}
+      packages=${rest#* }
+      case "$action" in
+        update)
+          if run_streamed "$APT_GET" -q update; then
+            emit_ok
+          else
+            emit_err "apt update 失败：${LOG_TAIL:-未知错误}"
+          fi
+          ;;
+        install)
+          if [ -z "$packages" ] || [ "$packages" = "$action" ]; then
+            emit_err '未指定软件包'; continue
+          fi
+          for pkg in $packages; do
+            case "$pkg" in
+              scx-scheds|scx-loader) ;;
+              *) emit_err "不允许安装的软件包：$pkg"; continue 2 ;;
+            esac
+          done
+          if run_streamed "$APT_GET" -y install $packages; then
+            emit_ok
+          else
+            emit_err "软件包安装失败：${LOG_TAIL:-未知错误}"
+          fi
+          ;;
+        *) emit_err 'APT 参数不允许' ;;
+      esac
+      ;;
+    RUSTC_VERSION)
+      out=$(rustc --version 2>/dev/null)
+      if [ -n "$out" ]; then
+        printf 'OK %s\n' "$out"
+      else
+        emit_err '未找到可用的 rustc'
+      fi
+      ;;
+    RUSTUP_INSTALL)
+      if ! command -v curl >/dev/null 2>&1; then
+        emit_err '未找到 curl，无法下载 Rust 工具链'; continue
+      fi
+      # 全链路走国内镜像 rsproxy.cn：引导脚本、rustup 二进制、工具链组件。
+      export RUSTUP_DIST_SERVER='https://rsproxy.cn'
+      export RUSTUP_UPDATE_ROOT='https://rsproxy.cn/rustup'
+      if run_streamed bash -o pipefail -c "curl --proto '=https' --tlsv1.2 -fsSL https://rsproxy.cn/rustup-init.sh | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path"; then
+        emit_ok
+      else
+        emit_err "Rust 工具链安装失败：${LOG_TAIL:-未知错误}"
+      fi
+      ;;
+    CARGO_INSTALL_LOADER)
+      if run_streamed cargo --config 'source.crates-io.replace-with="rsproxy-sparse"' \
+               --config 'source.rsproxy-sparse.registry="sparse+https://rsproxy.cn/index/"' \
+               install --root /usr scx_loader scxctl; then
+        emit_ok
+      else
+        emit_err "scx-loader 安装失败：${LOG_TAIL:-未知错误}"
+      fi
+      ;;
+    CARGO_INSTALL_LAVD)
+      if run_streamed cargo --config 'source.crates-io.replace-with="rsproxy-sparse"' \
+               --config 'source.rsproxy-sparse.registry="sparse+https://rsproxy.cn/index/"' \
+               install --root /usr scx_lavd; then
+        emit_ok
+      else
+        emit_err "scx_lavd 调度器安装失败：${LOG_TAIL:-未知错误}"
       fi
       ;;
     *) emit_err '未知命令' ;;

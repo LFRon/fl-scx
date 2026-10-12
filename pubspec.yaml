@@ -38,7 +38,7 @@ dependencies:
   nativeapi: ^0.5.2
   dbus: ^0.8.0
   get: ^4.7.3
-
+  internet_connection_checker_plus: ^3.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

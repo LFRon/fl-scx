@@ -47,8 +47,18 @@ const homeSections = <HomeSection>[
 const _twoLineTextShift = Offset(0, -3);
 
 /// 构建侧边栏条目；“关于”索引由底部条目承载，返回空占位。
-Widget buildHomeMasterTile(BuildContext context, int index, bool selected) {
+///
+/// scx 未安装时隐藏“调度器”与“设置”条目（对应页面也不可导航）。
+Widget buildHomeMasterTile(
+  BuildContext context,
+  int index,
+  bool selected, {
+  required bool scxInstalled,
+}) {
   if (index == HomeController.aboutIndex) {
+    return const SizedBox.shrink();
+  }
+  if (!scxInstalled && index != 0) {
     return const SizedBox.shrink();
   }
   final section = homeSections[index];

@@ -9,8 +9,8 @@ import 'startup_warmup.dart';
 
 /// 应用根组件：套用 Yaru 主题（跟随系统亮/暗色与强调色），
 /// 并通过 GetX 注入状态控制器。
-class ScxApp extends StatelessWidget {
-  const ScxApp({super.key});
+class FlScxApp extends StatelessWidget {
+  const FlScxApp({super.key});
 
   /// 小字号（bodySmall / labelMedium / labelSmall）统一 +3px。
   ///

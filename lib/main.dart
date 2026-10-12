@@ -13,5 +13,5 @@ Future<void> main() async {
   final appState = Get.put<ScxAppState>(ScxAppState(), permanent: true);
   await appState.preload();
 
-  runApp(const ScxApp());
+  runApp(const FlScxApp());
 }

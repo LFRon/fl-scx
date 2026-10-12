@@ -17,7 +17,11 @@ class SchedulersPage extends StatelessWidget {
     final app = controller.app;
 
     return YaruDetailPage(
-      appBar: AppBar(title: const Text('调度器')),
+      // 详情区标题栏承担窗口标题栏角色（窗口控制按钮在窗口右上角）。
+      appBar: YaruWindowTitleBar(
+        leading: Navigator.of(context).canPop() ? const YaruBackButton() : null,
+        title: const Text('调度器'),
+      ),
       body: Column(
         children: [
           Obx(() {

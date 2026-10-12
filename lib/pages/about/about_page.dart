@@ -36,7 +36,11 @@ class AboutPage extends GetView<ScxAppState> {
   @override
   Widget build(BuildContext context) {
     return YaruDetailPage(
-      appBar: AppBar(title: const Text('关于')),
+      // 详情区标题栏承担窗口标题栏角色（窗口控制按钮在窗口右上角）。
+      appBar: YaruWindowTitleBar(
+        leading: Navigator.of(context).canPop() ? const YaruBackButton() : null,
+        title: const Text('关于'),
+      ),
       body: Obx(() {
         final theme = Theme.of(context);
         final snapshot = controller.snapshot.value;

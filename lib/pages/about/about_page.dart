@@ -1,13 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
 import '../../backend/app_state.dart';
 import '../../backend/models/mode_args.dart';
 
-/// 关于页：应用说明、配置文件与内核 sched_ext 信息。
+/// 关于页：应用版本、应用说明、配置文件与内核 sched_ext 信息。
 class AboutPage extends GetView<ScxAppState> {
   const AboutPage({super.key});
+
+  /// 应用版本号（读取打包进资源的 pubspec.yaml，只读取一次并缓存）。
+  static final Future<String> appVersion = _readAppVersion();
+
+  static Future<String> _readAppVersion() async {
+    try {
+      final text = await rootBundle.loadString('pubspec.yaml');
+      final match = RegExp(
+        r'^version:\s*(\S+)',
+        multiLine: true,
+      ).firstMatch(text);
+      return match?.group(1) ?? '未知';
+    } catch (_) {
+      return '未知';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +42,16 @@ class AboutPage extends GetView<ScxAppState> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  YaruListTile(
+                    leading: const Icon(YaruIcons.information),
+                    title: const Text('应用版本'),
+                    subtitle: const Text('与 pubspec.yaml 中的版本一致'),
+                    trailing: FutureBuilder<String>(
+                      future: appVersion,
+                      builder: (context, snapshot) =>
+                          Text(snapshot.data ?? '读取中…'),
+                    ),
+                  ),
                   const YaruListTile(
                     leading: Icon(YaruIcons.computer_filled),
                     title: Text('SCX 调度管理器'),

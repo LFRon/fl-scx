@@ -13,8 +13,10 @@ import 'home_master_tile.dart';
 
 /// 应用外壳：在 Yaru 主从布局中展示各功能页面。
 ///
-/// scx 未安装时（统一的 [ScxAppState.scxInstalled] 开关为 false），
-/// 侧边栏只保留“概览”，隐藏“调度器”与“设置”条目。
+/// 顶栏使用 [YaruWindowTitleBar] 充当窗口标题栏（原生 GTK 标题栏已在
+/// 启动时隐藏）：右上角为 Yaru 风格的窗口控制按钮，空白处可拖动窗口、
+/// 双击最大化/还原。scx 未安装时（统一的 [ScxAppState.scxInstalled]
+/// 开关为 false），侧边栏只保留“概览”，隐藏“调度器”与“设置”条目。
 class HomePage extends GetView<ScxAppState> {
   const HomePage({super.key});
 
@@ -27,7 +29,7 @@ class HomePage extends GetView<ScxAppState> {
 
       return YaruMasterDetailPage(
         controller: home.pages,
-        appBar: AppBar(
+        appBar: YaruWindowTitleBar(
           title: DefaultTextStyle.merge(
             // 顶栏标题字号在此调整（继承主题颜色与字重）。
             style: const TextStyle(fontSize: 17),

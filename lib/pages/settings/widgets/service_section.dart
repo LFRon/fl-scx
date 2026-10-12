@@ -46,7 +46,7 @@ class ServiceSection extends GetView<ScxAppState> {
               trailing: StatusChip(
                 label: snapshot.service.active ? '运行中' : '已停止',
                 color: snapshot.service.active
-                    ? colors.success
+                    ? StatusChip.successColor(context)
                     : colors.warning,
               ),
             ),
@@ -63,7 +63,7 @@ class ServiceSection extends GetView<ScxAppState> {
                   StatusChip(
                     label: controller.helperActive.value ? '已授权' : '未授权',
                     color: controller.helperActive.value
-                        ? colors.success
+                        ? StatusChip.successColor(context)
                         : Theme.of(context).colorScheme.outline,
                   ),
                   const SizedBox(width: 12),

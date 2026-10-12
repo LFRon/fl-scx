@@ -46,7 +46,6 @@ class SchedModeSelector extends StatelessWidget {
 
   Widget _modeTile(BuildContext context, SchedMode mode) {
     final theme = Theme.of(context);
-    final colors = YaruColors.of(context);
     final configured =
         mode == SchedMode.auto || info.configuredModes.contains(mode);
     final isRecommended =
@@ -71,7 +70,7 @@ class SchedModeSelector extends StatelessWidget {
           // “运行中”位于“推荐”标识左侧。
           if (isRunningMode) ...[
             const SizedBox(width: 8),
-            StatusChip(label: '运行中', color: colors.success),
+            StatusChip(label: '运行中', color: StatusChip.successColor(context)),
           ],
           if (isRecommended) ...[
             const SizedBox(width: 8),

@@ -34,7 +34,6 @@ class SchedulerListPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = YaruColors.of(context);
 
     if (schedulers.isEmpty) {
       return Padding(
@@ -86,7 +85,10 @@ class SchedulerListPane extends StatelessWidget {
                       if (isRecommended && isRunning)
                         const SizedBox(width: 8),
                       if (isRunning)
-                        StatusChip(label: '运行中', color: colors.success),
+                        StatusChip(
+                          label: '运行中',
+                          color: StatusChip.successColor(context),
+                        ),
                     ],
                   )
                 : null,

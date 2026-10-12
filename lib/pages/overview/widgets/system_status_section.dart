@@ -29,7 +29,9 @@ class SystemStatusSection extends StatelessWidget {
             subtitle: const Text('/sys/kernel/sched_ext/state'),
             trailing: StatusChip(
               label: snapshot.kernelEnabled ? '已启用' : '未启用',
-              color: snapshot.kernelEnabled ? colors.success : colors.error,
+              color: snapshot.kernelEnabled
+                  ? StatusChip.successColor(context)
+                  : colors.error,
             ),
           ),
           YaruListTile(
@@ -50,7 +52,9 @@ class SystemStatusSection extends StatelessWidget {
             ),
             trailing: StatusChip(
               label: snapshot.service.active ? '运行中' : '已停止',
-              color: snapshot.service.active ? colors.success : colors.warning,
+              color: snapshot.service.active
+                  ? StatusChip.successColor(context)
+                  : colors.warning,
             ),
           ),
           YaruListTile(

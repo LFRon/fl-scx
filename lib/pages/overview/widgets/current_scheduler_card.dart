@@ -81,7 +81,7 @@ class CurrentSchedulerCard extends StatelessWidget {
                       icon: Icons.memory,
                       label: snapshot.kernelEnabled ? 'sched_ext 已启用' : 'sched_ext 未启用',
                       color: snapshot.kernelEnabled
-                          ? colors.success
+                          ? StatusChip.successColor(context)
                           : colors.error,
                     ),
                     StatusChip(
@@ -90,7 +90,7 @@ class CurrentSchedulerCard extends StatelessWidget {
                           ? 'scx_loader 运行中'
                           : 'scx_loader 已停止',
                       color: snapshot.service.active
-                          ? colors.success
+                          ? StatusChip.successColor(context)
                           : colors.warning,
                     ),
                   ],

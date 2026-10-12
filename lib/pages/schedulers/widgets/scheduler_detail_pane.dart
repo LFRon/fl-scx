@@ -33,7 +33,6 @@ class SchedulerDetailPane extends StatelessWidget {
 
     return Obx(() {
       final theme = Theme.of(context);
-      final colors = YaruColors.of(context);
       final snapshot = app.snapshot.value;
       final info = app.infoFor(scheduler);
       final mode = controller.mode.value;
@@ -74,7 +73,10 @@ class SchedulerDetailPane extends StatelessWidget {
                       ),
                       if (isRunning) ...[
                         const SizedBox(width: 12),
-                        StatusChip(label: '运行中', color: colors.success),
+                        StatusChip(
+                          label: '运行中',
+                          color: StatusChip.successColor(context),
+                        ),
                       ],
                     ],
                   ),

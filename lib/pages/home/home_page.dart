@@ -39,7 +39,8 @@ class HomePage extends GetView<ScxAppState> {
             Obx(
               () => controller.busy.value
                   ? const Padding(
-                      padding: EdgeInsets.only(right: 16),
+                      // 加载动画与右侧的间距在此调整：数值越大离窗口控制按钮越远。
+                      padding: EdgeInsets.only(right: 15),
                       child: Center(
                         child: SizedBox(
                           width: 18,
@@ -49,12 +50,6 @@ class HomePage extends GetView<ScxAppState> {
                       ),
                     )
                   : const SizedBox.shrink(),
-            ),
-            IconButton(
-              onPressed: controller.reload,
-              mouseCursor: SystemMouseCursors.click,
-              icon: const Icon(YaruIcons.refresh),
-              tooltip: '刷新',
             ),
           ],
         ),

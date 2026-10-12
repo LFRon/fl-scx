@@ -14,7 +14,7 @@ import '../../schedulers/schedulers_controller.dart';
 /// 调度器运行时显示“停止调度器”；停止后该位置变为可点击的
 /// “启动调度器”，启动目标为“调度器”页当前选中的调度器。
 /// 末尾固定提供“应用推荐配置”按钮（推荐调度器 + 推荐模式，
-/// 缺失或失败时弹通知）。
+/// 并一并写入开机默认，缺失或失败时弹通知）。
 ///
 /// 操作进行中时对应按钮显示加载动画与“启动中/停止中/…”文字，
 /// 并保持禁用，直到内核调度状态收敛。
@@ -109,18 +109,24 @@ class QuickActionsRow extends StatelessWidget {
                     : '停止调度器',
               ),
             ),
-          OutlinedButton.icon(
-            style: kClickableButtonStyle,
-            onPressed: disabled
-                ? null
-                : () => runBackendAction(
-                    context,
-                    _applyRecommended,
-                    successMessage:
-                        '已应用推荐配置（$recommendedScheduler · ${recommendedMode.label}）',
-                  ),
-            icon: const Icon(YaruIcons.star),
-            label: const Text('应用推荐配置'),
+          Tooltip(
+            message:
+                '推荐配置：$recommendedScheduler · ${recommendedMode.label}，'
+                '并写入开机默认',
+            child: OutlinedButton.icon(
+              style: kClickableButtonStyle,
+              onPressed: disabled
+                  ? null
+                  : () => runBackendAction(
+                      context,
+                      _applyRecommended,
+                      successMessage:
+                          '已应用推荐配置并写入开机默认'
+                          '（$recommendedScheduler · ${recommendedMode.label}）',
+                    ),
+              icon: const Icon(YaruIcons.star),
+              label: const Text('应用推荐配置'),
+            ),
           ),
         ],
       );
@@ -141,9 +147,11 @@ class QuickActionsRow extends StatelessWidget {
     return '尚未选择调度器，请先在“调度器”页选择';
   }
 
-  /// 应用推荐配置（推荐调度器 + 推荐模式）。
+  /// 应用推荐配置：推荐调度器 + 推荐模式，并写入开机默认。
   ///
-  /// 系统未提供推荐调度器或应用失败时，返回失败提示（界面弹通知）。
+  /// 推荐就推荐到底：运行时切换成功后，同步把同一推荐调度器与模式
+  /// 写为 scx_loader 的开机默认。系统未提供推荐调度器或任一步骤
+  /// 失败时，返回失败提示（界面弹通知）。
   Future<String?> _applyRecommended() async {
     final supported = state.snapshot.value.supportedSchedulers;
     if (!supported.contains(recommendedScheduler)) {
@@ -153,6 +161,17 @@ class QuickActionsRow extends StatelessWidget {
       scheduler: recommendedScheduler,
       mode: recommendedMode,
     );
-    return error == null ? null : '应用推荐配置失败：$error';
+    if (error != null) {
+      return '应用推荐配置失败：$error';
+    }
+
+    final configError = await state.saveDefaultScheduler(
+      scheduler: recommendedScheduler,
+      mode: recommendedMode,
+    );
+    if (configError != null) {
+      return '已应用推荐调度，但写入开机默认失败：$configError';
+    }
+    return null;
   }
 }

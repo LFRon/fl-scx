@@ -139,8 +139,12 @@ class _AppNotificationState extends State<_AppNotification>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final contentStyle =
-        theme.snackBarTheme.contentTextStyle ?? theme.textTheme.bodyMedium!;
+    final colorScheme = theme.colorScheme;
+    // 取色与 Material 3 的 SnackBar/Toast 规则一致：背景 inverseSurface、
+    // 文字 onInverseSurface（字体沿用主题里已注入的打包字体）。
+    final contentStyle = theme.textTheme.bodyMedium!.copyWith(
+      color: colorScheme.onInverseSurface,
+    );
     return Positioned(
       left: 24,
       right: 24,
@@ -154,9 +158,10 @@ class _AppNotificationState extends State<_AppNotification>
             child: Semantics(
               liveRegion: true,
               child: Material(
-                color: theme.snackBarTheme.backgroundColor ?? Colors.black87,
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
+                color: colorScheme.inverseSurface,
+                // 圆角与 AOSP toast 一致（frameworks/base toast_frame.xml，
+                // 28dp）；不设 elevation，黑色背景无边缘阴影。
+                borderRadius: BorderRadius.circular(28),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: Padding(

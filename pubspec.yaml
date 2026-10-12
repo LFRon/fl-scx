@@ -34,7 +34,14 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^2.0.0
-  yaru: ^11.0.0
+  # 指向 yaru.dart 的修复分支：fallback 桌面/主题检测不再经 platform_linux
+  # 读取已废弃的 Platform.environment（platform 3.2.0 下会抛
+  # UnimplementedError，KDE 等桌面直接崩溃）。在修复合入上游 release 分支
+  # 并发版前，先用本 fork 的 main；上游发版后改回 pub.dev 版本约束。
+  yaru:
+    git:
+      url: https://github.com/LFRon/yaru.dart-fix.git
+      ref: main
   nativeapi: ^0.5.2
   dbus: ^0.8.0
   get: ^4.7.3

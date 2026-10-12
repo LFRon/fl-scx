@@ -125,7 +125,7 @@ class _ScxInstallLogDialogState extends State<ScxInstallLogDialog> {
                               lines[index],
                               style: const TextStyle(
                                 fontFamily: 'monospace',
-                                fontSize: 12,
+                                fontSize: 15,
                                 height: 1.35,
                               ),
                             ),

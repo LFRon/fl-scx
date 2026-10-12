@@ -38,9 +38,14 @@ class AboutPage extends GetView<ScxAppState> {
     return YaruDetailPage(
       appBar: AppBar(title: const Text('关于')),
       body: Obx(() {
+        final theme = Theme.of(context);
         final snapshot = controller.snapshot.value;
         final ops = shortKernelOpsName(snapshot.kernelOps);
         final opsText = ops.isEmpty ? '无' : ops;
+        // 版本行在列表标题字号基础上加大 1px。
+        final versionStyle = theme.textTheme.labelLarge?.copyWith(
+          fontSize: (theme.textTheme.labelLarge?.fontSize ?? 14) + 1,
+        );
 
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -51,12 +56,13 @@ class AboutPage extends GetView<ScxAppState> {
                 children: [
                   YaruListTile(
                     leading: const Icon(YaruIcons.information),
-                    title: const Text('应用版本'),
-                    subtitle: const Text('与 pubspec.yaml 中的版本一致'),
+                    title: Text('应用版本', style: versionStyle),
                     trailing: FutureBuilder<String>(
                       future: appVersion,
-                      builder: (context, snapshot) =>
-                          Text(snapshot.data ?? '读取中…'),
+                      builder: (context, snapshot) => Text(
+                        snapshot.data ?? '读取中…',
+                        style: versionStyle,
+                      ),
                     ),
                   ),
                   const YaruListTile(

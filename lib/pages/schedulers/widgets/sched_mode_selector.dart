@@ -8,6 +8,11 @@ import '../../../widgets/recommendation.dart';
 import '../../../widgets/sched_mode_visuals.dart';
 import '../../../widgets/status_chip.dart';
 
+/// 模式标题/副标题的绘制微调：Noto Sans SC 下双行文字的墨迹在行盒内
+/// 整体偏低约 2 逻辑像素，上移后与左侧单选框（选中框）中心对齐
+/// （仅影响绘制，不影响布局）。
+const _modeTextShift = Offset(0, -2);
+
 /// 调度模式单选列表。
 class SchedModeSelector extends StatelessWidget {
   const SchedModeSelector({
@@ -63,26 +68,32 @@ class SchedModeSelector extends StatelessWidget {
               }
             }
           : null,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(mode.label),
-          // “运行中”位于“推荐”标识左侧。
-          if (isRunningMode) ...[
-            const SizedBox(width: 8),
-            StatusChip(label: '运行中', color: StatusChip.successColor(context)),
+      title: Transform.translate(
+        offset: _modeTextShift,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(mode.label),
+            // “运行中”位于“推荐”标识左侧。
+            if (isRunningMode) ...[
+              const SizedBox(width: 8),
+              StatusChip(label: '运行中', color: StatusChip.successColor(context)),
+            ],
+            if (isRecommended) ...[
+              const SizedBox(width: 8),
+              const RecommendedChip(),
+            ],
+            if (!configured) ...[
+              const SizedBox(width: 8),
+              StatusChip(label: '未配置参数', color: theme.colorScheme.outline),
+            ],
           ],
-          if (isRecommended) ...[
-            const SizedBox(width: 8),
-            const RecommendedChip(),
-          ],
-          if (!configured) ...[
-            const SizedBox(width: 8),
-            StatusChip(label: '未配置参数', color: theme.colorScheme.outline),
-          ],
-        ],
+        ),
       ),
-      subtitle: Text(mode.description),
+      subtitle: Transform.translate(
+        offset: _modeTextShift,
+        child: Text(mode.description),
+      ),
       secondary: Icon(mode.icon),
     );
   }

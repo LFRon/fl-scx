@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
+import '../../app/app_font.dart';
 import '../../backend/system/scx_installation.dart';
 import '../../widgets/button_styles.dart';
 import 'scx_install_controller.dart';
@@ -125,6 +126,9 @@ class _ScxInstallLogDialogState extends State<ScxInstallLogDialog> {
                               lines[index],
                               style: const TextStyle(
                                 fontFamily: 'monospace',
+                                // 等宽字体通常不含 CJK：命令输出中的中文
+                                // （如系统本地化日志）回退到打包字体。
+                                fontFamilyFallback: [kAppFontFamily],
                                 fontSize: 15,
                                 height: 1.35,
                               ),

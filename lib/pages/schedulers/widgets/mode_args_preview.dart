@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yaru/yaru.dart';
 
+import '../../../app/app_font.dart';
 import '../../../backend/models/sched_mode.dart';
 import '../../../backend/models/scx_snapshot.dart';
 
@@ -37,6 +38,9 @@ class ModeArgsPreview extends StatelessWidget {
               text,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontFamily: 'monospace',
+                // 等宽字体通常不含 CJK：中文回退到打包字体，
+                // 避免 ARM64 下回退到异常的系统字体。
+                fontFamilyFallback: const [kAppFontFamily],
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

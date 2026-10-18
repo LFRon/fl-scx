@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../app/app_font.dart';
+
 /// 通知在屏幕上停留的最长总时长（含入场与退场动画）。
 const _notificationLifetime = Duration(seconds: 2);
 
@@ -141,9 +143,11 @@ class _AppNotificationState extends State<_AppNotification>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     // 取色与 Material 3 的 SnackBar/Toast 规则一致：背景 inverseSurface、
-    // 文字 onInverseSurface（字体沿用主题里已注入的打包字体）。
+    // 文字 onInverseSurface；字体显式钉在打包字体上，不依赖主题注入链路
+    // （ARM64 下通知中的中文一旦回退到系统字体就会渲染异常）。
     final contentStyle = theme.textTheme.bodyMedium!.copyWith(
       color: colorScheme.onInverseSurface,
+      fontFamily: kAppFontFamily,
     );
     return Positioned(
       left: 24,

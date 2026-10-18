@@ -5,16 +5,13 @@ import 'package:yaru/yaru.dart';
 
 import '../pages/home/home_page.dart';
 import 'app_bindings.dart';
+import 'app_font.dart';
 import 'startup_warmup.dart';
 
 /// 应用根组件：套用 Yaru 主题（跟随系统亮/暗色与强调色），
 /// 并通过 GetX 注入状态控制器。
 class FlScxApp extends StatelessWidget {
   const FlScxApp({super.key});
-
-  /// 全局强制字体：ARM64 Desktop 下系统 CJK 字体回退异常，
-  /// 应用中英文统一改用打包的 Noto Sans SC（见 pubspec.yaml 的 fonts 段）。
-  static const _appFontFamily = 'Noto Sans SC';
 
   /// 构建带打包字体的 Yaru 主题。
   ///
@@ -36,11 +33,11 @@ class FlScxApp extends StatelessWidget {
               primaryColor: Colors.white,
               highContrast: true,
               elevatedButtonTextColor: Colors.black,
-              fontFamily: _appFontFamily,
+              fontFamily: kAppFontFamily,
             )
           : createYaruLightTheme(
               primaryColor: Colors.black,
-              fontFamily: _appFontFamily,
+              fontFamily: kAppFontFamily,
             );
     } else if (dark) {
       theme = createYaruDarkTheme(
@@ -48,7 +45,7 @@ class FlScxApp extends StatelessWidget {
         elevatedButtonColor: variant == YaruVariant.orange
             ? YaruColors.dark.success
             : null,
-        fontFamily: _appFontFamily,
+        fontFamily: kAppFontFamily,
       );
     } else {
       theme = createYaruLightTheme(
@@ -56,7 +53,7 @@ class FlScxApp extends StatelessWidget {
         elevatedButtonColor: variant == YaruVariant.orange
             ? YaruColors.light.success
             : null,
-        fontFamily: _appFontFamily,
+        fontFamily: kAppFontFamily,
       );
     }
 
@@ -80,7 +77,7 @@ class FlScxApp extends StatelessWidget {
       // 系统字体（ARM64 下渲染异常）。
       snackBarTheme: theme.snackBarTheme.copyWith(
         contentTextStyle: theme.snackBarTheme.contentTextStyle?.apply(
-          fontFamily: _appFontFamily,
+          fontFamily: kAppFontFamily,
         ),
       ),
     );

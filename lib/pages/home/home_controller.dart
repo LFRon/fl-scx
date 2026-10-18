@@ -3,8 +3,11 @@ import 'package:yaru/yaru.dart';
 
 /// 侧边栏导航状态：页面索引与“关于”底部固定条目。
 class HomeController extends GetxController {
+  /// “更新”页面索引（右侧显示可用更新红点）。
+  static const updateIndex = 3;
+
   /// “关于”页面索引：列在主列表之后，由侧边栏底部条目呈现。
-  static const aboutIndex = 3;
+  static const aboutIndex = 4;
 
   /// Yaru 主从布局的页面控制器。
   late final pages = YaruPageController(

@@ -141,6 +141,29 @@ class ScxInstallationService {
     }
   }
 
+  /// 判断 dpkg 状态文本中 [package] 已安装时的版本号；
+  /// 未安装或缺少 Version 字段时返回 null。
+  static String? dpkgPackageVersion(String dpkgStatusText, String package) {
+    for (final block in dpkgStatusText.split('\n\n')) {
+      String? name;
+      String? status;
+      String? version;
+      for (final line in block.split('\n')) {
+        if (line.startsWith('Package: ')) {
+          name = line.substring('Package: '.length).trim();
+        } else if (line.startsWith('Status: ')) {
+          status = line.substring('Status: '.length).trim();
+        } else if (line.startsWith('Version: ')) {
+          version = line.substring('Version: '.length).trim();
+        }
+      }
+      if (name == package) {
+        return status == 'install ok installed' ? version : null;
+      }
+    }
+    return null;
+  }
+
   /// rustc 版本文本（如 `rustc 1.95.0 (…)`）是否满足最低版本要求。
   static bool rustcSatisfies(String versionText) {
     final match = RegExp(r'rustc (\d+)\.(\d+)').firstMatch(versionText);

@@ -7,6 +7,7 @@ import '../about/about_page.dart';
 import '../overview/overview_page.dart';
 import '../schedulers/schedulers_page.dart';
 import '../settings/settings_page.dart';
+import '../update/update_page.dart';
 import 'home_bottom_bar.dart';
 import 'home_controller.dart';
 import 'home_master_tile.dart';
@@ -67,7 +68,8 @@ class HomePage extends GetView<ScxAppState> {
           0 => const OverviewPage(),
           1 when scxInstalled => const SchedulersPage(),
           2 when scxInstalled => const SettingsPage(),
-          3 => const AboutPage(),
+          3 when scxInstalled => const UpdatePage(),
+          4 => const AboutPage(),
           // 未安装时隐藏条目的索引不可达，兜底回到概览（安装引导页）。
           _ => const OverviewPage(),
         },

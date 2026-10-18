@@ -16,10 +16,14 @@ class ScxInstallLogDialog extends StatefulWidget {
     super.key,
     required this.controller,
     required this.method,
+    this.update = false,
   });
 
   final ScxInstallController controller;
   final ScxInstallMethod method;
+
+  /// 是否为覆盖更新场景（仅影响文案，安装/更新共用同一日志流）。
+  final bool update;
 
   @override
   State<ScxInstallLogDialog> createState() => _ScxInstallLogDialogState();
@@ -58,13 +62,18 @@ class _ScxInstallLogDialogState extends State<ScxInstallLogDialog> {
       });
 
       final title = active
-          ? (widget.method == ScxInstallMethod.apt
+          ? (widget.update
+                ? '正在通过 cargo 覆盖更新 scx'
+                : widget.method == ScxInstallMethod.apt
                 ? '正在从软件源安装 scx'
                 : '正在编译安装 scx 全家桶，请等待一定时间')
-          : (error != null ? '安装失败' : '安装完成');
+          : (error != null
+                ? (widget.update ? '更新失败' : '安装失败')
+                : (widget.update ? '更新完成' : '安装完成'));
       final status = active
           ? (progress.isEmpty ? '正在执行…' : progress)
-          : (error ?? 'scx 与 scx-loader 已安装完成');
+          : (error ??
+                (widget.update ? 'scx 组件已完成覆盖更新' : 'scx 与 scx-loader 已安装完成'));
 
       final screenWidth = MediaQuery.sizeOf(context).width;
       final contentWidth = screenWidth < 760 ? screenWidth - 120 : 640.0;

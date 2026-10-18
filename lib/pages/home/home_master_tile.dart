@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:yaru/yaru.dart';
 
+import '../update/update_controller.dart';
 import 'home_controller.dart';
 
 /// 侧边栏（master）条目定义。
@@ -38,6 +40,12 @@ const homeSections = <HomeSection>[
     title: '设置',
     subtitle: '自启动与默认调度',
   ),
+  HomeSection(
+    icon: YaruIcons.update_available,
+    selectedIcon: YaruIcons.update_available_filled,
+    title: '更新',
+    subtitle: '安装方式与版本检查',
+  ),
 ];
 
 /// 双行条目文字的绘制微调：Noto Sans SC 下整块文字墨迹相对选项框
@@ -71,5 +79,33 @@ Widget buildHomeMasterTile(
       offset: _twoLineTextShift,
       child: Text(section.subtitle),
     ),
+    // “更新”条目右侧：有可用更新时显示红点。
+    trailing: index == HomeController.updateIndex
+        ? const _UpdateAvailableDot()
+        : null,
   );
+}
+
+/// “更新”条目右侧的可用更新红点（附悬停提示，无更新时不占位）。
+class _UpdateAvailableDot extends StatelessWidget {
+  const _UpdateAvailableDot();
+
+  @override
+  Widget build(BuildContext context) {
+    final update = Get.find<UpdateController>();
+    final dotColor = Theme.of(context).colorScheme.error;
+    return Obx(() {
+      if (update.report.value?.hasUpdate != true) {
+        return const SizedBox.shrink();
+      }
+      return Tooltip(
+        message: '有可用更新',
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+        ),
+      );
+    });
+  }
 }

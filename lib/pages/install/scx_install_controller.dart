@@ -75,4 +75,27 @@ class ScxInstallController extends GetxController {
       activeMethod.value = null;
     }
   }
+
+  /// 用户级 cargo 覆盖更新（无需管理员授权，走国内镜像）。
+  ///
+  /// 复用与安装相同的进度与日志状态（[progress]、[logLines]），
+  /// 安装日志对话框可直接展示；返回 null 表示成功。
+  Future<String?> updateUserLevelCargo(List<String> crates) async {
+    installError.value = null;
+    logLines.clear();
+    activeMethod.value = ScxInstallMethod.cargo;
+    lastMethod.value = ScxInstallMethod.cargo;
+    progress.value = '准备覆盖更新…';
+    try {
+      final error = await app.updateUserLevelCargo(
+        crates,
+        onProgress: (text) => progress.value = text,
+        onLog: (line) => logLines.add(line),
+      );
+      installError.value = error;
+      return error;
+    } finally {
+      activeMethod.value = null;
+    }
+  }
 }

@@ -14,6 +14,7 @@ import 'system/privileged_file_writer.dart';
 import 'system/privileged_helper.dart';
 import 'system/scx_control_service.dart';
 import 'system/scx_installation.dart';
+import 'system/scx_update_service.dart';
 import 'system/systemd_controller.dart';
 
 /// 后端聚合状态：负责采集 scx / scx_loader / 内核 / systemd 信息，
@@ -35,6 +36,7 @@ class ScxAppState extends GetxController {
     LoaderConfig? config,
     ScxControlService? control,
     ScxInstallationService? installation,
+    ScxUpdateService? update,
   }) {
     final loader = client ?? ScxLoaderClient();
     final privileged = helper ?? PrivilegedHelper();
@@ -49,6 +51,7 @@ class ScxAppState extends GetxController {
       control: control ?? ScxControlService(dbus: loader, helper: privileged),
       installation:
           installation ?? ScxInstallationService(helper: privileged),
+      update: update ?? ScxUpdateService(),
     );
   }
 
@@ -60,6 +63,7 @@ class ScxAppState extends GetxController {
     required this._config,
     required this._control,
     required this._installation,
+    required this._update,
   });
 
   /// 单次后端读取的超时时间。
@@ -90,6 +94,7 @@ class ScxAppState extends GetxController {
   final LoaderConfig _config;
   final ScxControlService _control;
   final ScxInstallationService _installation;
+  final ScxUpdateService _update;
   Timer? _refreshTimer;
 
   /// 最近一次刷新得到的系统快照。
@@ -397,6 +402,20 @@ class ScxAppState extends GetxController {
     () => method == ScxInstallMethod.apt
         ? _installation.installViaApt(onProgress: onProgress, onLog: onLog)
         : _installation.installViaCargo(onProgress: onProgress, onLog: onLog),
+  );
+
+  /// 用户级 cargo 覆盖更新（无需管理员授权，走国内镜像）；
+  /// 输出经 [onLog] 逐行回传。返回 null 表示成功。
+  Future<String?> updateUserLevelCargo(
+    List<String> crates, {
+    void Function(String)? onProgress,
+    void Function(String)? onLog,
+  }) => _execute(
+    () => _update.updateViaCargoUserLevel(
+      crates: crates,
+      onProgress: onProgress,
+      onLog: onLog,
+    ),
   );
 
   /// 将 [scheduler] + [mode] 写入 scx_loader 配置文件作为开机默认；

@@ -10,6 +10,7 @@ import 'package:fl_scx/backend/system/distro_info.dart';
 import 'package:fl_scx/backend/system/privileged_helper.dart';
 import 'package:fl_scx/backend/system/scx_control_service.dart';
 import 'package:fl_scx/backend/system/scx_installation.dart';
+import 'package:fl_scx/backend/system/scx_update_service.dart';
 import 'package:fl_scx/backend/system/systemd_controller.dart';
 
 void main() {
@@ -352,6 +353,17 @@ auto_mode = ["--autopilot"]
         isFalse,
       );
     });
+
+    test('aptCheckSupportedForId 仅支持 Ubuntu/Debian/deepin', () {
+      expect(DistroInfo.aptCheckSupportedForId('deepin'), isTrue);
+      expect(DistroInfo.aptCheckSupportedForId('ubuntu'), isTrue);
+      expect(DistroInfo.aptCheckSupportedForId('Debian'), isTrue);
+      expect(DistroInfo.aptCheckSupportedForId('fedora'), isFalse);
+      expect(DistroInfo.aptCheckSupportedForId('arch'), isFalse);
+      expect(DistroInfo.aptCheckSupportedForId('linuxmint'), isFalse);
+      expect(DistroInfo.aptCheckSupportedForId(''), isFalse);
+      expect(DistroInfo.aptCheckSupportedForId(null), isFalse);
+    });
   });
 
   group('ScxInstallationService', () {
@@ -514,6 +526,224 @@ Status: install ok installed
       );
       expect(state.active, isFalse);
       expect(state.enabled, isFalse);
+    });
+  });
+
+  group('ScxUpdateService 更新检查', () {
+    const dpkgStatus = '''
+Package: scx-scheds
+Status: install ok installed
+Version: 1.1.3-2
+
+Package: scx-loader
+Status: deinstall ok config-files
+Version: 1.1.3-1
+
+Package: other
+Status: install ok installed
+''';
+
+    test('resolveSetup 系统源优先，再看 cargo，否则未知', () {
+      expect(
+        ScxUpdateService.resolveSetup(
+          repoPackagesInstalled: true,
+          cargoEvidence: true,
+        ),
+        ScxSetupKind.systemRepo,
+      );
+      expect(
+        ScxUpdateService.resolveSetup(
+          repoPackagesInstalled: false,
+          cargoEvidence: true,
+        ),
+        ScxSetupKind.cargo,
+      );
+      expect(
+        ScxUpdateService.resolveSetup(
+          repoPackagesInstalled: false,
+          cargoEvidence: false,
+        ),
+        ScxSetupKind.unknown,
+      );
+    });
+
+    test('cargoForceInstallArgs 走 rsproxy 镜像强制覆盖', () {
+      final args = ScxUpdateService.cargoForceInstallArgs([
+        'scx_loader',
+        'scxctl',
+      ]);
+      expect(args.take(2), ['install', '--force']);
+      expect(args, contains('source.crates-io.replace-with="rsproxy-sparse"'));
+      expect(
+        args,
+        contains(
+          'source.rsproxy-sparse.registry='
+          '"sparse+https://rsproxy.cn/index/"',
+        ),
+      );
+      expect(args.sublist(args.length - 2), ['scx_loader', 'scxctl']);
+    });
+
+    test('hasUpdate 反映组件状态', () {
+      const outdated = ScxUpdateReport(
+        setup: ScxSetupKind.cargo,
+        components: [
+          ScxComponentCheck(
+            name: 'scx_loader',
+            installedVersion: '1.1.3',
+            latestVersion: '1.1.4',
+            state: ScxVersionState.updateAvailable,
+          ),
+        ],
+      );
+      const current = ScxUpdateReport(
+        setup: ScxSetupKind.systemRepo,
+        components: [
+          ScxComponentCheck(
+            name: 'scx-scheds',
+            installedVersion: '1.1.4-1',
+            latestVersion: '1.1.4-1',
+            state: ScxVersionState.upToDate,
+          ),
+        ],
+      );
+      expect(outdated.hasUpdate, isTrue);
+      expect(outdated.cargoUserLevel, isFalse);
+      expect(current.hasUpdate, isFalse);
+    });
+
+    test('dpkgPackageVersion 读取已安装版本', () {
+      expect(
+        ScxInstallationService.dpkgPackageVersion(dpkgStatus, 'scx-scheds'),
+        '1.1.3-2',
+      );
+      expect(
+        ScxInstallationService.dpkgPackageVersion(dpkgStatus, 'scx-loader'),
+        isNull,
+      );
+      expect(
+        ScxInstallationService.dpkgPackageVersion(dpkgStatus, 'missing'),
+        isNull,
+      );
+    });
+
+    test('compareScxVersions 兼容打包版本与 crate 版本', () {
+      expect(
+        ScxUpdateService.compareScxVersions('1.1.4-1', '1.1.4'),
+        greaterThan(0),
+      );
+      expect(
+        ScxUpdateService.compareScxVersions('1.1.4', '1.1.4-1'),
+        lessThan(0),
+      );
+      expect(ScxUpdateService.compareScxVersions('1.1.4', '1.1.4'), 0);
+      expect(
+        ScxUpdateService.compareScxVersions('1.1.3', '1.1.4'),
+        lessThan(0),
+      );
+      expect(
+        ScxUpdateService.compareScxVersions('1.10.0', '1.9.9'),
+        greaterThan(0),
+      );
+      expect(ScxUpdateService.compareScxVersions('1:1.1.4', '1.1.4'), 0);
+      expect(
+        ScxUpdateService.compareScxVersions('1.1.4~rc1', '1.1.4'),
+        lessThan(0),
+      );
+      expect(ScxUpdateService.compareScxVersions('1.1', '1.1.0'), 0);
+    });
+
+    test('versionState 判定可更新/已是最新/未知', () {
+      expect(
+        ScxUpdateService.versionState('1.1.3-1', '1.1.4-1'),
+        ScxVersionState.updateAvailable,
+      );
+      expect(
+        ScxUpdateService.versionState('1.1.4-1', '1.1.4-1'),
+        ScxVersionState.upToDate,
+      );
+      expect(
+        ScxUpdateService.versionState('1.1.4', '1.1.3'),
+        ScxVersionState.upToDate,
+      );
+      expect(
+        ScxUpdateService.versionState(null, '1.1.4'),
+        ScxVersionState.unknown,
+      );
+      expect(
+        ScxUpdateService.versionState('1.1.4', null),
+        ScxVersionState.unknown,
+      );
+    });
+
+    test('parseAptCachePolicy 解析候选项与 (none)', () {
+      const output = '''
+scx-scheds:
+  Installed: 1.1.4-1
+  Candidate: 1.1.4-1
+  Version table:
+ *** 1.1.4-1 999
+        999 https://example.com/repo Packages
+        100 /var/lib/dpkg/status
+scx-loader:
+  Installed: (none)
+  Candidate: (none)
+  Version table:
+''';
+      final candidates = ScxUpdateService.parseAptCachePolicy(output);
+      expect(candidates['scx-scheds'], '1.1.4-1');
+      expect(candidates['scx-loader'], isNull);
+    });
+
+    test('parseCargoInstallList 解析 crate 与版本', () {
+      const output = '''
+scx_loader v1.1.3:
+    scx_loader
+scx_lavd v1.1.4:
+    scx_lavd
+ripgrep v14.1.1:
+    rg
+''';
+      final versions = ScxUpdateService.parseCargoInstallList(output);
+      expect(versions['scx_loader'], '1.1.3');
+      expect(versions['scx_lavd'], '1.1.4');
+      expect(versions['ripgrep'], '14.1.1');
+    });
+
+    test('sparseIndexPath 按名字长度生成索引路径', () {
+      expect(
+        ScxUpdateService.sparseIndexPath('scx_loader'),
+        'sc/x_/scx_loader',
+      );
+      expect(ScxUpdateService.sparseIndexPath('scxlavd'), 'sc/xl/scxlavd');
+      expect(ScxUpdateService.sparseIndexPath('a'), '1/a');
+      expect(ScxUpdateService.sparseIndexPath('ab'), '2/ab');
+      expect(ScxUpdateService.sparseIndexPath('abc'), '3/a/abc');
+    });
+
+    test('parseSparseIndexLatest 忽略 yank 并取最高版本', () {
+      const text = '''
+{"name":"scx_lavd","vers":"1.1.3","yanked":false}
+{"name":"scx_lavd","vers":"1.1.5","yanked":true}
+{"name":"scx_lavd","vers":"1.1.4","yanked":false}
+''';
+      expect(ScxUpdateService.parseSparseIndexLatest(text), '1.1.4');
+    });
+
+    test('parseCratesIoLatest 读取稳定版并容错', () {
+      expect(
+        ScxUpdateService.parseCratesIoLatest(
+          '{"crate":{"max_stable_version":"1.1.3",'
+          '"newest_version":"1.1.4-beta.1"}}',
+        ),
+        '1.1.3',
+      );
+      expect(ScxUpdateService.parseCratesIoLatest('not json'), isNull);
+    });
+
+    test('parseBinVersion 提取 x.y.z 版本号', () {
+      expect(ScxUpdateService.parseBinVersion('scx_loader 1.1.3\n'), '1.1.3');
+      expect(ScxUpdateService.parseBinVersion('no version here'), isNull);
     });
   });
 }

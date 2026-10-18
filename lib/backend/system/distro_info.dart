@@ -12,6 +12,10 @@ class DistroInfo {
     'https://repo.odata.cc/deepin25/',
   ];
 
+  /// 软件源（apt/dpkg）检查支持的发行版 ID：仅 Ubuntu、Debian、deepin，
+  /// 其它发行版一律不做软件源检查。
+  static const aptCheckDistroIds = <String>{'ubuntu', 'debian', 'deepin'};
+
   /// 解析 os-release 文本中的 ID（兼容引号写法）。
   static String? parseOsReleaseId(String text) {
     final match = RegExp(r'^ID=(.*)$', multiLine: true).firstMatch(text);
@@ -19,6 +23,20 @@ class DistroInfo {
       return null;
     }
     return match.group(1)!.trim().replaceAll(RegExp(r'''^["']|["']$'''), '');
+  }
+
+  /// [id] 是否在软件源检查支持列表内。
+  static bool aptCheckSupportedForId(String? id) =>
+      id != null && aptCheckDistroIds.contains(id.toLowerCase());
+
+  /// 当前发行版是否支持软件源检查（仅 Ubuntu / Debian / deepin）。
+  static Future<bool> aptCheckSupported() async {
+    try {
+      final text = await File(osReleasePath).readAsString();
+      return aptCheckSupportedForId(parseOsReleaseId(text));
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// 当前发行版是否为 deepin。
